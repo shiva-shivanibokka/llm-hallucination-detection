@@ -80,9 +80,11 @@ Note the top-level `backend/` + `frontend/` split is new — Task 1 moves the ex
 - [ ] **Step 4: Run isolation test** — `cd backend && PYTHONPATH=. python tests/test_vector_store_isolation.py` (in a clean env; on the dev machine it may segfault — see Task 2). Expected in clean env: `PASS`.
 - [ ] **Step 5: Commit** — `git add -A && git commit -m "refactor: split into backend/, delete dead duplicate trees and unused functions"`.
 
-### Task 2: Pin dependencies and resolve the local segfault
+### Task 2: Pin dependencies (DONE — handled by controller)
 
-**Root cause (from audit):** `import sentence_transformers` segfaults on the dev machine — a native DLL conflict among torch / onnxruntime / protobuf. Unpinned `>=` deps let incompatible native wheels resolve.
+**Root cause (confirmed during execution, 2026-07-11):** the segfault is NOT a project dep conflict — it is a stray `tensorflow` in the dev machine's *global* conda env colliding with torch during `sentence_transformers`' auto-probe. Proof: with TF import intercepted, `import sentence_transformers` no longer segfaults. The shipped backend is torch-only (no tensorflow in `requirements.txt`), so the Docker image and Linux CI never hit this. Local dev fix: fresh venv from `requirements.txt`, or `pip uninstall tensorflow`.
+
+**Outcome:** `backend/requirements.txt` pinned to exact, actually-working versions (torch 2.6.0, transformers 4.57.6, sentence-transformers 5.4.1, chromadb 1.5.8, etc.), `requests`/`gradio` dropped (unused after Task 1), `datasets` + `psycopg[binary,pool]` added for later phases. `backend/tests/test_env_imports.py` asserts the import succeeds — enforced in CI (Task 18, clean Linux) and the Docker build (Task 11); expected to fail only on a TF-polluted local host. Verification of a from-scratch clean install lands in CI/Docker, not the polluted global env.
 
 **Files:**
 - Modify: `backend/requirements.txt` (exact pins)

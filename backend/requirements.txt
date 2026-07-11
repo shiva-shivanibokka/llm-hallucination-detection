@@ -1,26 +1,38 @@
+# Pinned for reproducible builds. Torch-only stack — do NOT add tensorflow.
+# (A stray tensorflow in a local env collides with torch during
+#  sentence-transformers import and segfaults; the clean venv / Docker image
+#  below never installs it. Local dev: use a fresh venv from this file, or
+#  `pip uninstall tensorflow` in your global env.)
+#
+# Note: on a CPU-only host (HF Spaces free tier) install torch from the CPU
+# wheel index to keep the image small — see backend/Dockerfile.
+
 # Core ML / NLP
-torch>=2.2.0
-transformers>=4.40.0
-sentence-transformers>=3.0.0
+torch==2.6.0
+transformers==4.57.6
+sentence-transformers==5.4.1
+numpy==1.26.4
 
 # Vector store
-chromadb>=0.5.0
+chromadb==1.5.8
 
 # LLM providers — all routed through the OpenAI-compatible SDK
-openai>=1.30.0
+openai==2.31.0
 
 # Document ingestion
-pypdf>=4.2.0
-requests>=2.31.0
+pypdf==6.9.2
+
+# Dataset (RAGTruth)
+datasets==3.2.0
+
+# Persistence (Neon Postgres)
+psycopg[binary,pool]==3.2.3
 
 # API
-fastapi>=0.111.0
-uvicorn>=0.29.0
-pydantic>=2.7.0
-python-multipart>=0.0.9
-
-# Frontend
-gradio>=4.36.0
+fastapi==0.111.0
+uvicorn==0.30.1
+pydantic==2.7.4
+python-multipart==0.0.24
 
 # Utilities
-python-dotenv>=1.0.0
+python-dotenv==1.2.1
