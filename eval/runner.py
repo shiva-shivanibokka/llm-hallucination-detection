@@ -79,29 +79,32 @@ def run_benchmark(
                 on_progress(i, len(test_cases))
 
             store = VectorStore()
-            chunks = extract_text_chunks(tc["reference_text"])
-            if chunks:
-                store.add_chunks(chunks, source_label=f"test_case_{tc['id']}")
-
             try:
-                response = generate_grounded(
-                    question=tc["question"],
-                    vector_store=store,
-                    provider=provider,
-                    model=model,
-                    api_key=api_key,
-                )
-            except Exception as e:
-                response = f"[ERROR: {e}]"
+                chunks = extract_text_chunks(tc["reference_text"])
+                if chunks:
+                    store.add_chunks(chunks, source_label=f"test_case_{tc['id']}")
 
-            analysis = detector.analyze(
-                response,
-                store,
-                entail_threshold=entail_threshold,
-                contradict_threshold=contradict_threshold,
-                grounded_ceiling=grounded_ceiling,
-                partial_ceiling=partial_ceiling,
-            )
+                try:
+                    response = generate_grounded(
+                        question=tc["question"],
+                        vector_store=store,
+                        provider=provider,
+                        model=model,
+                        api_key=api_key,
+                    )
+                except Exception as e:
+                    response = f"[ERROR: {e}]"
+
+                analysis = detector.analyze(
+                    response,
+                    store,
+                    entail_threshold=entail_threshold,
+                    contradict_threshold=contradict_threshold,
+                    grounded_ceiling=grounded_ceiling,
+                    partial_ceiling=partial_ceiling,
+                )
+            finally:
+                store.close()
 
             sentence_results = [asdict(sr) for sr in analysis.sentence_results]
 

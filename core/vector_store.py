@@ -12,18 +12,21 @@ import chromadb
 from chromadb.utils import embedding_functions
 
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-COLLECTION_NAME = "source_documents"
 TOP_K = 5
 
 
 class VectorStore:
     def __init__(self) -> None:
+        # chromadb.Client() is process-shared, so every VectorStore must use a
+        # UNIQUE collection name — otherwise per-test-case stores accumulate each
+        # other's chunks (and concurrent runs collide). See tests/test_vector_store_isolation.py.
         self._client = chromadb.Client()
+        self._name = f"src_{uuid.uuid4().hex}"
         self._ef = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name=EMBED_MODEL
         )
         self._collection = self._client.get_or_create_collection(
-            name=COLLECTION_NAME,
+            name=self._name,
             embedding_function=self._ef,
             metadata={"hnsw:space": "cosine"},
         )
@@ -55,10 +58,9 @@ class VectorStore:
     def count(self) -> int:
         return self._collection.count()
 
-    def reset(self) -> None:
-        self._client.delete_collection(COLLECTION_NAME)
-        self._collection = self._client.get_or_create_collection(
-            name=COLLECTION_NAME,
-            embedding_function=self._ef,
-            metadata={"hnsw:space": "cosine"},
-        )
+    def close(self) -> None:
+        """Delete this store's collection to free memory on the shared client."""
+        try:
+            self._client.delete_collection(self._name)
+        except Exception:
+            pass
