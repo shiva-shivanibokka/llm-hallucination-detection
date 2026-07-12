@@ -189,13 +189,17 @@ async function getJson<T>(
   path: string,
   searchParams?: Record<string, string | number>
 ): Promise<T> {
-  const url = new URL(`${API_BASE}${path}`);
+  // Build the query string without `new URL`, which throws on a relative URL
+  // (e.g. if NEXT_PUBLIC_API_BASE is unset) and would take down every fetch.
+  let qs = "";
   if (searchParams) {
+    const sp = new URLSearchParams();
     for (const [key, value] of Object.entries(searchParams)) {
-      url.searchParams.set(key, String(value));
+      sp.set(key, String(value));
     }
+    qs = `?${sp.toString()}`;
   }
-  const res = await fetch(url.toString());
+  const res = await fetch(`${API_BASE}${path}${qs}`);
   if (!res.ok) {
     throw new Error(`GET ${path} failed: ${res.status}`);
   }
