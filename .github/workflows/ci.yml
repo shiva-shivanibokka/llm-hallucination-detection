@@ -31,8 +31,8 @@ jobs:
           python-version: "3.12"
       - name: Install CPU torch (keep it off the CUDA wheel)
         run: pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
-      - name: Install backend deps + ruff
-        run: pip install -r backend/requirements.txt ruff
+      - name: Install backend deps + ruff + pytest
+        run: pip install -r backend/requirements.txt ruff pytest
       - name: Lint
         run: ruff check backend
       - name: Test (import in a clean torch-only env; Postgres from the service)
