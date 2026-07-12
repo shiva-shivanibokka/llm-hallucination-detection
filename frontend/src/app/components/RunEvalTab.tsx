@@ -33,7 +33,9 @@ export default function RunEvalTab() {
         const [b, p] = await Promise.all([listBenchmarks(), getProviders()]);
         setBenchmarks(b);
         setProviders(p);
-        setBenchmarkId((prev) => prev ?? b[0]?.id ?? null);
+        // Default to a runnable benchmark — an empty one would just 422 on start.
+        const firstRunnable = b.find((x) => x.case_count > 0) ?? b[0];
+        setBenchmarkId((prev) => prev ?? firstRunnable?.id ?? null);
         const first = Object.keys(p)[0] ?? "";
         setProvider(first);
         setModel(p[first]?.models?.[0] ?? "");

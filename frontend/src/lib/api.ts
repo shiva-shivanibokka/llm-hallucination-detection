@@ -185,6 +185,24 @@ export interface SeedRagtruthResult {
 
 // ---------- Fetch helpers ----------
 
+// Pull a human-readable message out of a failed response. FastAPI returns
+// {"detail": "..."} for HTTPExceptions and {"detail": [{msg, loc}, ...]} for
+// 422 validation errors — surface either so the UI shows *why*, not just a code.
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const data = await res.json();
+    const detail = data?.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      return detail.map((d) => d?.msg ?? String(d)).join("; ") || fallback;
+    }
+    if (detail) return JSON.stringify(detail);
+  } catch {
+    /* body wasn't JSON */
+  }
+  return fallback;
+}
+
 async function getJson<T>(
   path: string,
   searchParams?: Record<string, string | number>
@@ -201,7 +219,7 @@ async function getJson<T>(
   }
   const res = await fetch(`${API_BASE}${path}${qs}`);
   if (!res.ok) {
-    throw new Error(`GET ${path} failed: ${res.status}`);
+    throw new Error(await errorMessage(res, `GET ${path} failed: ${res.status}`));
   }
   return res.json() as Promise<T>;
 }
@@ -217,7 +235,7 @@ async function proxyJson<T>(
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    throw new Error(`${method} ${path} failed: ${res.status}`);
+    throw new Error(await errorMessage(res, `${method} ${path} failed: ${res.status}`));
   }
   if (res.status === 204) {
     return undefined as T;

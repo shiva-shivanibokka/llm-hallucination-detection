@@ -251,6 +251,7 @@ def generate_cases(benchmark_id: int, req: GenerateCasesRequest):
     try:
         raw = _call_llm(system, prompt, req.provider, req.model, req.api_key)
     except Exception as e:
+        log.warning("generate_cases_llm_failed provider=%s model=%s: %s", req.provider, req.model, e)
         raise HTTPException(status_code=502, detail=f"LLM call failed: {e}")
 
     questions = []

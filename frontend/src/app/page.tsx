@@ -9,9 +9,14 @@ const load = (p: () => Promise<{ default: ComponentType }>) =>
 
 const TABS = [
   {
-    id: "new",
-    title: "New Benchmark",
-    tagline: "Upload a reference PDF and generate a benchmark of grounded questions from it.",
+    id: "about",
+    title: "About",
+    tagline: "What this project does, the concepts behind it, and a step-by-step guide to every tab.",
+  },
+  {
+    id: "ragtruth",
+    title: "RAGTruth",
+    tagline: "Seed the human-labeled RAGTruth dataset as a benchmark to measure the detector against real annotations.",
   },
   {
     id: "run",
@@ -30,18 +35,19 @@ const TABS = [
     tagline: "See how two runs differ, and whether public source documents put grounded scores at risk of contamination.",
   },
   {
-    id: "ragtruth",
-    title: "RAGTruth",
-    tagline: "Seed the human-labeled RAGTruth dataset as a benchmark to measure the detector against real annotations.",
+    id: "new",
+    title: "New Benchmark",
+    tagline: "Upload a reference PDF and generate a benchmark of grounded questions from it (needs your API key).",
   },
 ];
 
 const TAB_COMPONENTS: Record<string, ComponentType> = {
-  new: load(() => import("./components/NewBenchmarkTab")),
+  about: load(() => import("./components/AboutTab")),
+  ragtruth: load(() => import("./components/RagtruthTab")),
   run: load(() => import("./components/RunEvalTab")),
   results: load(() => import("./components/ResultsTab")),
   compare: load(() => import("./components/CompareTab")),
-  ragtruth: load(() => import("./components/RagtruthTab")),
+  new: load(() => import("./components/NewBenchmarkTab")),
 };
 
 export default function Home() {

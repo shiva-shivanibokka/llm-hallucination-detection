@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createBenchmark, generateCases, getProviders, type Providers } from "@/lib/api";
+import { createBenchmark, deleteBenchmark, generateCases, getProviders, type Providers } from "@/lib/api";
 import { extractPdfText } from "@/lib/pdf";
 
 const DOMAINS = ["general", "legal", "medical", "finance", "technical", "news", "other"];
@@ -85,20 +85,27 @@ export default function NewBenchmarkTab() {
         name: name.trim(),
         description: `Generated from ${file?.name ?? "uploaded PDF"}`,
       });
-      const result = await generateCases(benchmark.id, {
-        reference_text: extractedText,
-        num_cases: numQuestions,
-        domain,
-        source_type: sourceType,
-        provider,
-        model,
-        api_key: apiKey.trim(),
-      });
-      setGeneratedQuestions(result.questions);
-      setGeneratedFor(benchmark.name);
-      setFile(null);
-      setExtractedText("");
-      setName("");
+      try {
+        const result = await generateCases(benchmark.id, {
+          reference_text: extractedText,
+          num_cases: numQuestions,
+          domain,
+          source_type: sourceType,
+          provider,
+          model,
+          api_key: apiKey.trim(),
+        });
+        setGeneratedQuestions(result.questions);
+        setGeneratedFor(benchmark.name);
+        setFile(null);
+        setExtractedText("");
+        setName("");
+      } catch (genError) {
+        // Generation failed — roll back the empty benchmark so it doesn't
+        // linger in the Run Eval list and trap you into a "no test cases" error.
+        await deleteBenchmark(benchmark.id).catch(() => {});
+        throw genError;
+      }
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Could not create the benchmark. Try again.");
     } finally {
