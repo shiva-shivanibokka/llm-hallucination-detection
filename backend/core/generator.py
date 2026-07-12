@@ -108,9 +108,10 @@ DEFAULT_MODEL: dict[str, str] = {
 }
 
 
-def _get_client(provider: str) -> OpenAI:
-    """Return an OpenAI SDK client configured for the given provider.
-    Keys come from the server environment only (never the request body)."""
+def _get_client(provider: str, api_key: Optional[str] = None) -> OpenAI:
+    """Return an OpenAI SDK client for the given provider.
+    Key resolution (BYOK): the caller-supplied api_key wins; otherwise fall back
+    to the server env key (so free providers work out-of-the-box)."""
     provider = provider.lower()
     if provider not in PROVIDERS:
         raise ValueError(
@@ -121,18 +122,18 @@ def _get_client(provider: str) -> OpenAI:
 
     if cfg["env_key"] is None:
         # Ollama — local, no key needed
-        api_key = "ollama"
+        resolved_key = "ollama"
     else:
-        api_key = os.getenv(cfg["env_key"])
-        if not api_key:
+        resolved_key = api_key or os.getenv(cfg["env_key"])
+        if not resolved_key:
             raise ValueError(
-                f"API key for '{provider}' not configured. "
-                f"Set {cfg['env_key']} in the server environment (HF Space Secrets)."
+                f"No API key for '{provider}'. Paste your own key (BYOK) or set "
+                f"{cfg['env_key']} in the server environment."
             )
 
     return OpenAI(
         base_url=cfg["base_url"],
-        api_key=api_key,
+        api_key=resolved_key,
         default_headers=cfg.get("extra_headers", {}),
     )
 
@@ -142,6 +143,7 @@ def _call_llm(
     prompt: str,
     provider: str,
     model: Optional[str],
+    api_key: Optional[str] = None,
 ) -> str:
     """Core call: routes to the right provider and returns the response text."""
     provider = provider.lower()
@@ -151,7 +153,7 @@ def _call_llm(
             f"No model specified and no default found for provider '{provider}'."
         )
 
-    client = _get_client(provider)
+    client = _get_client(provider, api_key)
     try:
         response = client.chat.completions.create(
             model=resolved_model,
@@ -174,6 +176,7 @@ def generate_grounded(
     vector_store,
     provider: str = "openai",
     model: Optional[str] = None,
+    api_key: Optional[str] = None,
 ) -> str:
     """Generate a response grounded in source documents from the vector store."""
     candidates = vector_store.query(question, k=TOP_K_CONTEXT)
@@ -195,4 +198,4 @@ def generate_grounded(
         "Only state something is missing if the documents genuinely contain nothing relevant."
     )
     prompt = f"Source documents:\n\n{context}\n\nQuestion: {question}"
-    return _call_llm(system, prompt, provider, model)
+    return _call_llm(system, prompt, provider, model, api_key)

@@ -47,6 +47,7 @@ export default function BenchmarksPage() {
   const [sourceType, setSourceType] = useState("internal");
   const [provider, setProvider] = useState("");
   const [model, setModel] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [generatedQuestions, setGeneratedQuestions] = useState<string[] | null>(null);
@@ -124,6 +125,7 @@ export default function BenchmarksPage() {
         source_type: sourceType,
         provider,
         model,
+        api_key: apiKey.trim() || undefined,
       });
       setGeneratedQuestions(result.questions);
       setFile(null);
@@ -270,6 +272,17 @@ export default function BenchmarksPage() {
                     </option>
                   ))}
                 </Select>
+              </div>
+
+              <div>
+                <Label>API key (optional — bring your own)</Label>
+                <Input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Leave blank to use the server key"
+                  autoComplete="off"
+                />
               </div>
 
               <Button

@@ -103,12 +103,14 @@ class GenerateCasesRequest(BaseModel):
     source_type: str = "internal"
     provider: str = "openai"
     model: Optional[str] = None
+    api_key: Optional[str] = None  # BYOK; falls back to the server env key
 
 
 class StartRunRequest(BaseModel):
     benchmark_id: int
     provider: str
     model: str
+    api_key: Optional[str] = None  # BYOK; falls back to the server env key
     entail_threshold: float = DEFAULT_ENTAIL_THRESHOLD
     contradict_threshold: float = DEFAULT_CONTRADICT_THRESHOLD
     grounded_ceiling: float = DEFAULT_GROUNDED_CEILING
@@ -247,7 +249,7 @@ def generate_cases(benchmark_id: int, req: GenerateCasesRequest):
         f"Generate {num} factual questions about this document."
     )
     try:
-        raw = _call_llm(system, prompt, req.provider, req.model)
+        raw = _call_llm(system, prompt, req.provider, req.model, req.api_key)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"LLM call failed: {e}")
 
@@ -291,6 +293,7 @@ def start_run(req: StartRunRequest, background_tasks: BackgroundTasks):
     background_tasks.add_task(
         run_benchmark,
         run_id=run["id"],
+        api_key=req.api_key,
         entail_threshold=req.entail_threshold,
         contradict_threshold=req.contradict_threshold,
         grounded_ceiling=req.grounded_ceiling,

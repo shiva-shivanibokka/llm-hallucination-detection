@@ -24,7 +24,7 @@ talks to it over HTTPS.
 | `DATABASE_URL` | Neon Postgres connection string (`postgresql://…?sslmode=require`) |
 | `APP_API_TOKEN` | Shared bearer token; the frontend sends it on mutating calls |
 | `FRONTEND_ORIGIN` | Allowed CORS origin(s), e.g. `https://your-app.vercel.app` |
-| `OPENAI_API_KEY` etc. | Provider keys for whichever providers you enable (optional) |
+| `OPENAI_API_KEY` etc. | Provider keys (optional). Set free-tier ones (Groq/Gemini/Mistral) so the demo works out of the box; users can **BYOK** (paste their own key per run) for any provider, which takes priority over these. |
 
 The service fails fast on startup if `DATABASE_URL` or `APP_API_TOKEN` is unset.
 

@@ -97,6 +97,6 @@ card on **Results**.
 | Vector store | ChromaDB (in-memory, isolated per test case) |
 | Database | Neon Postgres |
 | Dataset | RAGTruth (`wandb/RAGTruth-processed`) |
-| LLM providers | OpenAI, Anthropic, Groq, Mistral, Gemini, Ollama (OpenAI-compatible) |
+| LLM providers | OpenAI, Anthropic, Groq, Mistral, Gemini, Ollama (OpenAI-compatible) — **BYOK**: paste your own key per run, or fall back to the server's free-tier keys |
 | Backend | FastAPI + Pydantic + Uvicorn, on HF Spaces (Docker) |
 | Frontend | Next.js (App Router) + Tailwind, on Vercel |

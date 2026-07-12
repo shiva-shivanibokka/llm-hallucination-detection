@@ -149,6 +149,7 @@ export interface GenerateCasesBody {
   source_type: string;
   provider: string;
   model: string;
+  api_key?: string; // BYOK; blank falls back to the server env key
 }
 
 export interface GenerateCasesResult {
@@ -160,6 +161,7 @@ export interface StartRunBody {
   benchmark_id: number;
   provider: string;
   model: string;
+  api_key?: string; // BYOK; blank falls back to the server env key
   entail_threshold: number;
   contradict_threshold: number;
   grounded_ceiling: number;

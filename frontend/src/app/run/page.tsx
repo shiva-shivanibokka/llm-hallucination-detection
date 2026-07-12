@@ -14,6 +14,7 @@ import {
   Button,
   Card,
   ErrorBanner,
+  Input,
   Label,
   ProgressBar,
   SectionHeading,
@@ -36,6 +37,7 @@ export default function RunPage() {
   const [benchmarkId, setBenchmarkId] = useState<number | null>(null);
   const [provider, setProvider] = useState("");
   const [model, setModel] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -105,6 +107,7 @@ export default function RunPage() {
         benchmark_id: benchmarkId,
         provider,
         model,
+        api_key: apiKey.trim() || undefined,
         entail_threshold: thresholds.entail,
         contradict_threshold: thresholds.contradict,
         grounded_ceiling: thresholds.grounded,
@@ -164,6 +167,16 @@ export default function RunPage() {
                   </option>
                 ))}
               </Select>
+            </div>
+            <div>
+              <Label>API key (optional — bring your own)</Label>
+              <Input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Leave blank to use the server key"
+                autoComplete="off"
+              />
             </div>
           </div>
 

@@ -17,6 +17,7 @@ GET /runs/{run_id}. LLM provider keys come from the server environment only.
 """
 
 from dataclasses import asdict
+from typing import Optional
 
 from core.detector import (
     HallucinationDetector,
@@ -45,6 +46,7 @@ log = get_logger(__name__)
 
 def run_benchmark(
     run_id: int,
+    api_key: Optional[str] = None,
     entail_threshold: float = DEFAULT_ENTAIL_THRESHOLD,
     contradict_threshold: float = DEFAULT_CONTRADICT_THRESHOLD,
     grounded_ceiling: float = DEFAULT_GROUNDED_CEILING,
@@ -81,7 +83,7 @@ def run_benchmark(
             response, analysis = _score_case(
                 tc, detector, provider, model,
                 entail_threshold, contradict_threshold,
-                grounded_ceiling, partial_ceiling, run_id,
+                grounded_ceiling, partial_ceiling, run_id, api_key,
             )
             predicted = label_to_binary(analysis["overall_label"])
 
@@ -138,7 +140,7 @@ _FAILED_ANALYSIS = {
 
 
 def _score_case(tc, detector, provider, model, entail, contradict,
-                grounded_ceil, partial_ceil, run_id):
+                grounded_ceil, partial_ceil, run_id, api_key=None):
     """Generate + score one case. On generation failure, return a fully-
     hallucinated result WITHOUT running NLI on the error text."""
     store = VectorStore()
@@ -157,7 +159,7 @@ def _score_case(tc, detector, provider, model, entail, contradict,
             try:
                 response = generate_grounded(
                     question=tc["question"], vector_store=store,
-                    provider=provider, model=model,
+                    provider=provider, model=model, api_key=api_key,
                 )
             except Exception as e:  # noqa: BLE001 — one bad case must not fail the run
                 log.warning("generation_failed",
