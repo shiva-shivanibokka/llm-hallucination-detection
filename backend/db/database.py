@@ -40,9 +40,11 @@ def _dsn() -> str:
 def get_pool() -> ConnectionPool:
     global _pool
     if _pool is None:
+        # min_size=0: don't hold a connection open while idle, so Neon (free tier)
+        # can autosuspend and not burn compute hours when the backend is idle.
         _pool = ConnectionPool(
             _dsn(),
-            min_size=1,
+            min_size=0,
             max_size=5,
             kwargs={"row_factory": dict_row, "autocommit": False},
             open=True,
