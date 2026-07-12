@@ -1,39 +1,28 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import Nav from "@/components/Nav";
+import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const display = Space_Grotesk({ subsets: ["latin"], variable: "--font-display", weight: ["500", "600", "700"] });
+const body = Inter({ subsets: ["latin"], variable: "--font-body" });
+const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", weight: ["500", "700"] });
 
 export const metadata: Metadata = {
-  title: "Halo Eval — Hallucination Detection Platform",
+  title: "LLM Hallucination Eval",
   description:
-    "Benchmark, run, and compare LLM providers on grounding and factual accuracy against reference documents.",
+    "Scores an LLM's answers against reference documents with an NLI model and reports how well the detector agrees with human hallucination labels.",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="flex min-h-full flex-col">
-        <Nav />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
-          {children}
-        </main>
+    <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
+      <body>
+        <div className="aurora" aria-hidden="true">
+          <span className="blob b1" />
+          <span className="blob b2" />
+          <span className="blob b3" />
+          <span className="blob b4" />
+        </div>
+        {children}
       </body>
     </html>
   );

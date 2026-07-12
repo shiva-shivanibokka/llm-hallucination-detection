@@ -1,320 +1,87 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  createBenchmark,
-  deleteBenchmark,
-  generateCases,
-  getProviders,
-  listBenchmarks,
-  type Benchmark,
-  type Providers,
-} from "@/lib/api";
-import { extractPdfText } from "@/lib/pdf";
-import {
-  Button,
-  Card,
-  EmptyState,
-  ErrorBanner,
-  Input,
-  Label,
-  Select,
-  SectionHeading,
-  Slider,
-} from "@/components/ui";
+import { useState } from "react";
+import dynamic from "next/dynamic";
+import type { ComponentType } from "react";
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
+const load = (p: () => Promise<{ default: ComponentType }>) =>
+  dynamic(p, { ssr: false, loading: () => <p className="note">loading…</p> });
 
-export default function BenchmarksPage() {
-  const [benchmarks, setBenchmarks] = useState<Benchmark[]>([]);
-  const [providers, setProviders] = useState<Providers>({});
-  const [loading, setLoading] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
+const TABS = [
+  {
+    id: "new",
+    title: "New Benchmark",
+    tagline: "Upload a reference PDF and generate a benchmark of grounded questions from it.",
+  },
+  {
+    id: "run",
+    title: "Run Eval",
+    tagline: "Score an LLM's answers against a benchmark, sentence by sentence, with an NLI detector.",
+  },
+  {
+    id: "results",
+    title: "Results",
+    tagline:
+      "Inspect a run's domain breakdown and per-question verdicts — and, for labeled runs, the detector's F1 against human judgments.",
+  },
+  {
+    id: "compare",
+    title: "Compare",
+    tagline: "See how two runs differ, and whether public source documents put grounded scores at risk of contamination.",
+  },
+  {
+    id: "ragtruth",
+    title: "RAGTruth",
+    tagline: "Seed the human-labeled RAGTruth dataset as a benchmark to measure the detector against real annotations.",
+  },
+];
 
-  // Create-from-PDF form state
-  const [file, setFile] = useState<File | null>(null);
-  const [extractedText, setExtractedText] = useState("");
-  const [extracting, setExtracting] = useState(false);
-  const [name, setName] = useState("");
-  const [numQuestions, setNumQuestions] = useState(10);
-  const [domain, setDomain] = useState("general");
-  const [sourceType, setSourceType] = useState("internal");
-  const [provider, setProvider] = useState("");
-  const [model, setModel] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [generatedQuestions, setGeneratedQuestions] = useState<string[] | null>(null);
+const TAB_COMPONENTS: Record<string, ComponentType> = {
+  new: load(() => import("./components/NewBenchmarkTab")),
+  run: load(() => import("./components/RunEvalTab")),
+  results: load(() => import("./components/ResultsTab")),
+  compare: load(() => import("./components/CompareTab")),
+  ragtruth: load(() => import("./components/RagtruthTab")),
+};
 
-  async function refresh() {
-    try {
-      const [b, p] = await Promise.all([listBenchmarks(), getProviders()]);
-      setBenchmarks(b);
-      setProviders(p);
-      if (!provider) {
-        const firstProvider = Object.keys(p)[0] ?? "";
-        setProvider(firstProvider);
-        setModel(p[firstProvider]?.models?.[0] ?? "");
-      }
-    } catch {
-      setListError("Could not reach the backend. Check that the API is running.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    (async () => {
-      await refresh();
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function handleProviderChange(nextProvider: string) {
-    setProvider(nextProvider);
-    setModel(providers[nextProvider]?.models?.[0] ?? "");
-  }
-
-  async function handleFile(f: File | null) {
-    setFile(f);
-    setExtractedText("");
-    setGeneratedQuestions(null);
-    setFormError(null);
-    if (!f) return;
-    setExtracting(true);
-    try {
-      const text = await extractPdfText(f);
-      if (!text) {
-        setFormError("No extractable text found in that PDF.");
-      } else {
-        setExtractedText(text);
-        if (!name) {
-          setName(f.name.replace(/\.pdf$/i, ""));
-        }
-      }
-    } catch {
-      setFormError("Could not read that PDF. Try a different file.");
-    } finally {
-      setExtracting(false);
-    }
-  }
-
-  async function handleCreate() {
-    if (!name.trim() || !extractedText || !provider || !model) {
-      setFormError("Add a PDF, a name, and pick a provider before generating.");
-      return;
-    }
-    setSubmitting(true);
-    setFormError(null);
-    setGeneratedQuestions(null);
-    try {
-      const benchmark = await createBenchmark({
-        name: name.trim(),
-        description: `Generated from ${file?.name ?? "uploaded PDF"}`,
-      });
-      const result = await generateCases(benchmark.id, {
-        reference_text: extractedText,
-        num_cases: numQuestions,
-        domain: domain.trim() || "general",
-        source_type: sourceType,
-        provider,
-        model,
-        api_key: apiKey.trim() || undefined,
-      });
-      setGeneratedQuestions(result.questions);
-      setFile(null);
-      setExtractedText("");
-      setName("");
-      await refresh();
-    } catch (e) {
-      setFormError(e instanceof Error ? e.message : "Failed to create benchmark.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleDelete(id: number) {
-    if (!confirm("Delete this benchmark and all of its test cases?")) return;
-    try {
-      await deleteBenchmark(id);
-      setBenchmarks((prev) => prev.filter((b) => b.id !== id));
-    } catch {
-      setListError("Could not delete that benchmark.");
-    }
-  }
+export default function Home() {
+  const [active, setActive] = useState(TABS[0].id);
+  const tab = TABS.find((t) => t.id === active)!;
+  const Comp = TAB_COMPONENTS[tab.id];
 
   return (
-    <div className="space-y-10">
-      <section>
-        <SectionHeading
-          eyebrow="Step 1"
-          title="Benchmarks"
-        />
-        {listError && <ErrorBanner message={listError} />}
-        {!listError && loading && (
-          <p className="text-sm text-[var(--text-muted)]">Loading benchmarks…</p>
-        )}
-        {!listError && !loading && benchmarks.length === 0 && (
-          <EmptyState
-            title="No benchmarks yet"
-            body="Create one from a PDF below to get started."
-          />
-        )}
-        {!listError && benchmarks.length > 0 && (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {benchmarks.map((b) => (
-              <Card key={b.id} className="flex flex-col justify-between p-4">
-                <div>
-                  <p className="font-medium text-[var(--text)]">{b.name}</p>
-                  {b.description && (
-                    <p className="mt-1 line-clamp-2 text-xs text-[var(--text-muted)]">
-                      {b.description}
-                    </p>
-                  )}
-                </div>
-                <div className="mt-4 flex items-center justify-between">
-                  <div className="font-mono text-xs text-[var(--text-muted)]">
-                    <span className="text-[var(--text)]">{b.case_count}</span> cases ·{" "}
-                    {formatDate(b.created_at)}
-                  </div>
-                  <button
-                    onClick={() => handleDelete(b.id)}
-                    className="text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--hallucinated)]"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </Card>
-            ))}
+    <main className="wrap">
+      <header className="hero">
+        <h1>LLM Hallucination Eval</h1>
+        <p>
+          Scores an LLM&rsquo;s answers sentence-by-sentence against your own reference documents with an NLI
+          entailment model, then reports how well that detector agrees with human hallucination labels from
+          RAGTruth.
+        </p>
+        <span className="live">
+          <b>●</b> live · GCP Cloud Run + Neon · RAGTruth-labeled
+        </span>
+      </header>
+
+      <nav className="tabs" role="tablist" aria-label="Sections">
+        {TABS.map((t) => (
+          <button key={t.id} className="tab" role="tab" aria-selected={t.id === active} onClick={() => setActive(t.id)}>
+            {t.title}
+          </button>
+        ))}
+      </nav>
+
+      <section className="panel" role="tabpanel">
+        <div className="panel-head">
+          <div className="htitle">
+            <h2>{tab.title}</h2>
           </div>
-        )}
+        </div>
+        <p className="panel-tagline">{tab.tagline}</p>
+        {Comp ? <Comp /> : null}
       </section>
 
-      <section>
-        <SectionHeading eyebrow="Step 2" title="Create from PDF" />
-        <Card className="p-5">
-          <div className="grid gap-5 md:grid-cols-2">
-            <div className="space-y-4">
-              <div>
-                <Label>Source PDF</Label>
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
-                  className="block w-full text-sm text-[var(--text-muted)] file:mr-3 file:rounded-md file:border file:border-[var(--border)] file:bg-[var(--surface)] file:px-3 file:py-1.5 file:text-sm file:text-[var(--text)] hover:file:border-[var(--accent)]"
-                />
-                {extracting && (
-                  <p className="mt-1 text-xs text-[var(--text-muted)]">Extracting text…</p>
-                )}
-                {!extracting && extractedText && (
-                  <p className="mt-1 font-mono text-xs text-[var(--grounded)]">
-                    {extractedText.length.toLocaleString()} characters extracted
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <Label>Benchmark name</Label>
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Q3 policy handbook"
-                />
-              </div>
-
-              <div>
-                <Label>Domain</Label>
-                <Input
-                  value={domain}
-                  onChange={(e) => setDomain(e.target.value)}
-                  placeholder="general"
-                />
-              </div>
-
-              <div>
-                <Label>Source type</Label>
-                <Select value={sourceType} onChange={(e) => setSourceType(e.target.value)}>
-                  <option value="internal">Internal (private document)</option>
-                  <option value="public">Public (contamination risk)</option>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <Label>Questions to generate (3–30)</Label>
-                <Slider value={numQuestions} onChange={setNumQuestions} min={3} max={30} />
-              </div>
-
-              <div>
-                <Label>Provider</Label>
-                <Select value={provider} onChange={(e) => handleProviderChange(e.target.value)}>
-                  {Object.keys(providers).map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-
-              <div>
-                <Label>Model</Label>
-                <Select value={model} onChange={(e) => setModel(e.target.value)}>
-                  {(providers[provider]?.models ?? []).map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-
-              <div>
-                <Label>API key (optional — bring your own)</Label>
-                <Input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="Leave blank to use the server key"
-                  autoComplete="off"
-                />
-              </div>
-
-              <Button
-                onClick={handleCreate}
-                disabled={submitting || extracting || !extractedText}
-                className="mt-2 w-full"
-              >
-                {submitting ? "Generating…" : "Create benchmark & generate questions"}
-              </Button>
-              {formError && <ErrorBanner message={formError} />}
-            </div>
-          </div>
-
-          {generatedQuestions && (
-            <div className="mt-6 border-t border-[var(--border)] pt-5">
-              <p className="mb-2 font-mono text-xs uppercase tracking-widest text-[var(--text-muted)]">
-                {generatedQuestions.length} questions generated
-              </p>
-              <ol className="space-y-1.5">
-                {generatedQuestions.map((q, i) => (
-                  <li key={i} className="text-sm text-[var(--text)]">
-                    <span className="mr-2 font-mono text-xs text-[var(--text-muted)]">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    {q}
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-        </Card>
-      </section>
-    </div>
+      <p className="footer">Built by Shivani Bokka</p>
+    </main>
   );
 }
