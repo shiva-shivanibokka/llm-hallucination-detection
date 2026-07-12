@@ -70,6 +70,41 @@ def add_test_case(
     return dict(row)
 
 
+def add_test_cases(conn, benchmark_id: int, rows: list[dict]) -> int:
+    """Insert many test cases atomically (one transaction, one commit). A failure
+    mid-way rolls the whole batch back instead of leaving a half-populated
+    benchmark. Each row: question, reference_text, and optional domain,
+    source_type, gold_label, answer."""
+    if not rows:
+        return 0
+    params = [
+        (
+            benchmark_id, r["question"], r["reference_text"],
+            r.get("domain", "general"), r.get("source_type", "internal"),
+            r.get("gold_label"), r.get("answer"),
+        )
+        for r in rows
+    ]
+    with conn.cursor() as cur:
+        cur.executemany(
+            """INSERT INTO test_cases
+                 (benchmark_id, question, reference_text, domain, source_type, gold_label, answer)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+            params,
+        )
+    conn.commit()
+    return len(rows)
+
+
+def case_has_results(conn, test_case_id: int) -> bool:
+    """True if any run_results row references this case (deleting it would
+    corrupt the history of completed runs via ON DELETE CASCADE)."""
+    row = conn.execute(
+        "SELECT 1 FROM run_results WHERE test_case_id = %s LIMIT 1", (test_case_id,)
+    ).fetchone()
+    return row is not None
+
+
 def get_test_cases(conn, benchmark_id: int) -> list[dict]:
     rows = conn.execute(
         "SELECT * FROM test_cases WHERE benchmark_id = %s ORDER BY id",
@@ -194,8 +229,8 @@ def get_source_type_scores(conn, run_id: int) -> dict:
         """SELECT tc.source_type,
                   COUNT(*)                    AS total,
                   AVG(rr.hallucination_score) AS avg_score,
-                  SUM(CASE WHEN rr.overall_label = 'GROUNDED'     THEN 1 ELSE 0 END) AS grounded,
-                  SUM(CASE WHEN rr.overall_label = 'HALLUCINATED' THEN 1 ELSE 0 END) AS hallucinated
+                  SUM(CASE WHEN rr.overall_label = 'GROUNDED'  THEN 1 ELSE 0 END) AS grounded,
+                  SUM(CASE WHEN rr.overall_label <> 'GROUNDED' THEN 1 ELSE 0 END) AS hallucinated
            FROM run_results rr
            JOIN test_cases tc ON tc.id = rr.test_case_id
            WHERE rr.run_id = %s
@@ -215,9 +250,11 @@ def get_domain_scores(conn, run_id: int) -> list[dict]:
         """SELECT tc.domain,
                   COUNT(*)                    AS total,
                   AVG(rr.hallucination_score) AS avg_score,
-                  SUM(CASE WHEN rr.overall_label = 'GROUNDED'           THEN 1 ELSE 0 END) AS grounded,
-                  SUM(CASE WHEN rr.overall_label = 'PARTIALLY_GROUNDED' THEN 1 ELSE 0 END) AS partial,
-                  SUM(CASE WHEN rr.overall_label = 'HALLUCINATED'       THEN 1 ELSE 0 END) AS hallucinated
+                  SUM(CASE WHEN rr.overall_label = 'GROUNDED'                 THEN 1 ELSE 0 END) AS grounded,
+                  SUM(CASE WHEN rr.overall_label = 'PARTIALLY_GROUNDED'       THEN 1 ELSE 0 END) AS partial,
+                  -- UNGROUNDED (empty-response short-circuit) counts as hallucinated,
+                  -- matching the F1 mapping, so grounded+partial+hallucinated = total.
+                  SUM(CASE WHEN rr.overall_label IN ('HALLUCINATED','UNGROUNDED') THEN 1 ELSE 0 END) AS hallucinated
            FROM run_results rr
            JOIN test_cases tc ON tc.id = rr.test_case_id
            WHERE rr.run_id = %s

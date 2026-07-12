@@ -8,8 +8,15 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 const API_TOKEN = process.env.APP_API_TOKEN ?? "";
 
 async function forward(req: NextRequest, path: string[]): Promise<NextResponse> {
-  const upstreamUrl = new URL(`${API_BASE}/${path.join("/")}`);
-  upstreamUrl.search = req.nextUrl.search;
+  if (!API_BASE) {
+    // Without a base URL there's nowhere to forward — fail with a clear message
+    // instead of letting `new URL()` throw an opaque 500. (See getJson in api.ts.)
+    return NextResponse.json(
+      { detail: "Server misconfigured: NEXT_PUBLIC_API_BASE is not set." },
+      { status: 500 }
+    );
+  }
+  const upstreamUrl = `${API_BASE}/${path.join("/")}${req.nextUrl.search}`;
 
   const init: RequestInit = {
     method: req.method,

@@ -54,11 +54,19 @@ export default function ResultsTab() {
       setLoading(true);
       setError(null);
       try {
-        const [d, res, m] = await Promise.all([getDomains(runId), getResults(runId), getMetrics(runId)]);
+        // Settle independently — a failure in one shouldn't blank the others.
+        const [d, res, m] = await Promise.allSettled([
+          getDomains(runId),
+          getResults(runId),
+          getMetrics(runId),
+        ]);
         if (cancelled) return;
-        setDomains(d);
-        setResults(res);
-        setMetrics(m);
+        setDomains(d.status === "fulfilled" ? d.value : []);
+        setResults(res.status === "fulfilled" ? res.value : []);
+        setMetrics(m.status === "fulfilled" ? m.value : null);
+        if (d.status === "rejected" && res.status === "rejected") {
+          setError("Could not load results for that run.");
+        }
       } catch {
         if (!cancelled) setError("Could not load results for that run.");
       } finally {

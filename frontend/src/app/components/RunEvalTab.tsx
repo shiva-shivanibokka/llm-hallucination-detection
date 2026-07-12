@@ -25,6 +25,7 @@ export default function RunEvalTab() {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [run, setRun] = useState<RunDetail | null>(null);
+  const [pollDead, setPollDead] = useState(false); // poll lost connection — stop treating run as live
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -69,7 +70,8 @@ export default function RunEvalTab() {
         if (detail.status === "completed" || detail.status === "failed") stopPolling();
       } catch {
         stopPolling();
-        setStartError("Lost connection while checking run status.");
+        setPollDead(true); // re-enable Start; the backend run may still finish
+        setStartError("Lost connection while checking run status. The run may still be running — reload to check.");
       }
     }, POLL_MS);
   }
@@ -79,8 +81,14 @@ export default function RunEvalTab() {
       setStartError("Pick a benchmark, provider, and model first.");
       return;
     }
+    const selected = benchmarks.find((b) => b.id === benchmarkId);
+    if (selected && selected.case_count === 0) {
+      setStartError(`"${selected.name}" has no test cases. Seed RAGTruth or create a benchmark with cases first.`);
+      return;
+    }
     setStarting(true);
     setStartError(null);
+    setPollDead(false);
     setRun(null);
     try {
       const { run_id } = await startRun({
@@ -103,7 +111,8 @@ export default function RunEvalTab() {
     }
   }
 
-  const running = Boolean(run && run.status !== "completed" && run.status !== "failed");
+  const running =
+    !pollDead && Boolean(run && run.status !== "completed" && run.status !== "failed");
   const progress = run && run.total_cases > 0 ? run.completed_cases / run.total_cases : 0;
 
   return (

@@ -104,38 +104,25 @@ class HallucinationDetector:
                 best_source_similarity=0.0,
             )
 
-        best_chunk = candidates[0]["chunk"]
-        best_similarity = candidates[0]["similarity"]
-        best_entail = 0.0
-        best_contradict = 0.0
-        best_neutral = 0.0
+        scored = [
+            self._score_pair(candidate["chunk"][:512], sentence[:256])
+            for candidate in candidates
+        ]
+        # Grounding is judged by the best-supporting chunk, but contradiction is
+        # taken as the STRONGEST across all chunks — a sentence contradicted by
+        # chunk B must not be missed just because chunk A entails it more.
+        best_i, best_entail, best_contradict, best_neutral = _reduce_candidates(scored)
+        best_chunk = candidates[best_i]["chunk"]
+        best_similarity = candidates[best_i]["similarity"]
 
-        for candidate in candidates:
-            chunk = candidate["chunk"]
-            premise = chunk[:512]
-            hypothesis = sentence[:256]
-            scores = self._score_pair(premise, hypothesis)
-            if scores["entailment"] > best_entail:
-                best_entail = scores["entailment"]
-                best_contradict = scores["contradiction"]
-                best_neutral = scores["neutral"]
-                best_chunk = chunk
-                best_similarity = candidate["similarity"]
-
-        if best_entail >= entail_threshold:
-            label = "GROUNDED"
-            hallucination_score = 1.0 - best_entail
-        elif best_contradict >= contradict_threshold:
-            label = "CONTRADICTED"
-            hallucination_score = best_contradict
-        else:
-            label = "UNGROUNDED"
-            hallucination_score = 1.0 - best_entail
+        label, hallucination_score = _classify(
+            best_entail, best_contradict, entail_threshold, contradict_threshold
+        )
 
         return SentenceResult(
             sentence=sentence,
             label=label,
-            hallucination_score=round(hallucination_score, 4),
+            hallucination_score=hallucination_score,
             entailment_score=round(best_entail, 4),
             contradiction_score=round(best_contradict, 4),
             neutral_score=round(best_neutral, 4),
@@ -157,6 +144,37 @@ class HallucinationDetector:
             if label in scores:
                 scores[label] = item["score"]
         return scores
+
+
+def _reduce_candidates(scored: list[dict]) -> tuple[int, float, float, float]:
+    """Reduce per-candidate NLI scores to (best_entail_index, best_entailment,
+    best_contradiction, neutral_of_best_entail_chunk).
+
+    Entailment/neutral come from the single best-supporting chunk; contradiction
+    is the MAX across all chunks so a contradiction in a non-top chunk still counts.
+    """
+    best_i = 0
+    for i in range(1, len(scored)):
+        if scored[i]["entailment"] > scored[best_i]["entailment"]:
+            best_i = i
+    best_entail = scored[best_i]["entailment"]
+    best_neutral = scored[best_i]["neutral"]
+    best_contradict = max(s["contradiction"] for s in scored)
+    return best_i, best_entail, best_contradict, best_neutral
+
+
+def _classify(
+    best_entail: float,
+    best_contradict: float,
+    entail_threshold: float,
+    contradict_threshold: float,
+) -> tuple[str, float]:
+    """Label a sentence and its hallucination score from its best entail/contradict."""
+    if best_entail >= entail_threshold:
+        return "GROUNDED", round(1.0 - best_entail, 4)
+    if best_contradict >= contradict_threshold:
+        return "CONTRADICTED", round(best_contradict, 4)
+    return "UNGROUNDED", round(1.0 - best_entail, 4)
 
 
 def _split_sentences(text: str) -> list[str]:

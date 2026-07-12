@@ -56,7 +56,6 @@ PROVIDERS: dict[str, dict] = {
         "models": [
             "llama-3.3-70b-versatile",
             "llama-3.1-8b-instant",
-            "mixtral-8x7b-32768",
             "gemma2-9b-it",
         ],
     },
@@ -164,7 +163,8 @@ def _call_llm(
             temperature=0.2,
             max_tokens=512,
         )
-        return response.choices[0].message.content.strip()
+        # content can be None on a content-filter / safety finish — don't crash.
+        return (response.choices[0].message.content or "").strip()
     except Exception as e:
         raise RuntimeError(
             f"LLM call failed ({provider} | {resolved_model}): {e}"

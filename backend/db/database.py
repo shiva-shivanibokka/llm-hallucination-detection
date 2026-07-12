@@ -17,6 +17,7 @@ order exactly once, tracked in the schema_migrations table.
 """
 
 import os
+import threading
 from pathlib import Path
 
 from psycopg.rows import dict_row
@@ -25,6 +26,7 @@ from psycopg_pool import ConnectionPool
 MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
 
 _pool: ConnectionPool | None = None
+_pool_lock = threading.Lock()
 
 
 def _dsn() -> str:
@@ -39,7 +41,13 @@ def _dsn() -> str:
 
 def get_pool() -> ConnectionPool:
     global _pool
-    if _pool is None:
+    if _pool is not None:
+        return _pool
+    # Double-checked lock: FastAPI serves sync endpoints from a threadpool, so
+    # two concurrent first-callers must not each build a pool.
+    with _pool_lock:
+        if _pool is not None:
+            return _pool
         # min_size=0: don't hold a connection open while idle, so Neon (free tier)
         # can autosuspend and not burn compute hours when the backend is idle.
         # check=check_connection: Neon terminates idle connections on autosuspend

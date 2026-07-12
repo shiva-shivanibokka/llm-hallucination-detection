@@ -67,11 +67,18 @@ def load_ragtruth(split: str = "train", limit: int | None = 50) -> list[RagCase]
     return cases
 
 
-def seed_ragtruth_benchmark(conn, name: str, split: str = "train",
+def seed_ragtruth_benchmark(name: str, split: str = "train",
                             limit: int | None = 50) -> dict:
-    """Create a benchmark named `name` and populate it with RAGTruth cases."""
-    from db import models as db
+    """Create a benchmark named `name` and populate it with RAGTruth cases.
 
+    Opens its own DB connection only AFTER the (multi-minute) dataset download,
+    so it never holds a pooled connection idle across the network fetch — the
+    same pattern the eval runner uses for the model load.
+    """
+    from db import models as db
+    from db.database import get_connection
+
+    # Network download happens with NO DB connection held.
     cases = load_ragtruth(split=split, limit=limit)
     if not cases:
         raise ValueError("RAGTruth returned no usable rows — check dataset id/split.")
@@ -84,11 +91,15 @@ def seed_ragtruth_benchmark(conn, name: str, split: str = "train",
             "hallucination-annotation field names likely changed. Verify the "
             "'wandb/RAGTruth-processed' schema in data/ragtruth.py before seeding."
         )
-    bm = db.create_benchmark(conn, name, f"RAGTruth {split} (n={len(cases)}) — human-labeled")
-    for c in cases:
-        db.add_test_case(
-            conn, bm["id"], c.question, c.reference_text,
-            domain=c.domain, source_type=c.source_type,
-            gold_label=c.gold_label, answer=c.answer,
-        )
+    rows = [
+        {
+            "question": c.question, "reference_text": c.reference_text,
+            "domain": c.domain, "source_type": c.source_type,
+            "gold_label": c.gold_label, "answer": c.answer,
+        }
+        for c in cases
+    ]
+    with get_connection() as conn:
+        bm = db.create_benchmark(conn, name, f"RAGTruth {split} (n={len(cases)}) — human-labeled")
+        db.add_test_cases(conn, bm["id"], rows)
     return {"benchmark_id": bm["id"], "added": len(cases)}

@@ -260,15 +260,29 @@ def generate_cases(benchmark_id: int, req: GenerateCasesRequest):
         if cleaned:
             questions.append(cleaned)
 
+    rows = [
+        {"question": q, "reference_text": req.reference_text,
+         "domain": req.domain, "source_type": req.source_type}
+        for q in questions
+    ]
     with get_connection() as conn:
-        for q in questions:
-            db.add_test_case(conn, benchmark_id, q, req.reference_text, req.domain, req.source_type)
+        db.add_test_cases(conn, benchmark_id, rows)  # atomic: all or nothing
     return {"generated": len(questions), "questions": questions}
 
 
 @app.delete("/cases/{case_id}", status_code=204, dependencies=[Depends(require_token)])
 def delete_case(case_id: int):
     with get_connection() as conn:
+        # run_results FK is ON DELETE CASCADE, so deleting a case that's been
+        # run would silently wipe its rows from completed runs and desync their
+        # stored avg_score. Refuse instead of corrupting history.
+        if db.case_has_results(conn, case_id):
+            raise HTTPException(
+                status_code=409,
+                detail="This test case is part of completed run(s); deleting it "
+                       "would corrupt their results. Delete the runs or the whole "
+                       "benchmark instead.",
+            )
         db.delete_test_case(conn, case_id)
 
 
@@ -356,8 +370,9 @@ def seed_ragtruth(req: SeedRagtruthRequest):
     limit = max(1, min(req.limit, MAX_SEED_LIMIT))
     name = req.name or f"RAGTruth {req.split} (n={limit})"
     try:
-        with get_connection() as conn:
-            return seed_ragtruth_benchmark(conn, name, split=req.split, limit=limit)
+        # seed_ragtruth_benchmark manages its own connection AFTER the dataset
+        # download, so no pooled connection is held idle across the network fetch.
+        return seed_ragtruth_benchmark(name, split=req.split, limit=limit)
     except Exception as e:
         log.exception("ragtruth_seed_failed")
         raise HTTPException(status_code=500, detail=f"RAGTruth seed failed: {e}")

@@ -5,6 +5,7 @@ ChromaDB wrapper. Stores text chunks as embeddings using sentence-transformers.
 One in-memory collection per process — ephemeral, resets on restart.
 """
 
+import logging
 import uuid
 from typing import Optional
 
@@ -13,6 +14,8 @@ from chromadb.utils import embedding_functions
 
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 TOP_K = 5
+
+_log = logging.getLogger(__name__)
 
 
 class VectorStore:
@@ -62,5 +65,5 @@ class VectorStore:
         """Delete this store's collection to free memory on the shared client."""
         try:
             self._client.delete_collection(self._name)
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 — cleanup is best-effort, but log the leak
+            _log.warning("vector_store_close_failed: leaked collection %s", self._name)

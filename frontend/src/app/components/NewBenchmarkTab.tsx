@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createBenchmark, deleteBenchmark, generateCases, getProviders, type Providers } from "@/lib/api";
 import { extractPdfText } from "@/lib/pdf";
 
@@ -24,6 +24,7 @@ export default function NewBenchmarkTab() {
   const [formError, setFormError] = useState<string | null>(null);
   const [generatedQuestions, setGeneratedQuestions] = useState<string[] | null>(null);
   const [generatedFor, setGeneratedFor] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     (async () => {
@@ -100,6 +101,7 @@ export default function NewBenchmarkTab() {
         setFile(null);
         setExtractedText("");
         setName("");
+        if (fileRef.current) fileRef.current.value = ""; // let the same PDF be re-picked
       } catch (genError) {
         // Generation failed — roll back the empty benchmark so it doesn't
         // linger in the Run Eval list and trap you into a "no test cases" error.
@@ -122,7 +124,7 @@ export default function NewBenchmarkTab() {
           <label>
             <span className="lname">Source PDF</span>
           </label>
-          <input type="file" accept="application/pdf" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
+          <input ref={fileRef} type="file" accept="application/pdf" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
           {extracting && <span className="note">Extracting text…</span>}
           {!extracting && extractedText && (
             <span className="note">{extractedText.length.toLocaleString()} characters extracted.</span>
