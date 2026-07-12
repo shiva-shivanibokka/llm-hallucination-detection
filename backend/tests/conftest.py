@@ -7,8 +7,17 @@ import pytest
 
 @pytest.fixture
 def db():
-    if not os.getenv("DATABASE_URL"):
+    dsn = os.getenv("DATABASE_URL")
+    if not dsn:
         pytest.skip("DATABASE_URL not set — DB integration tests require Postgres")
+    # These tests TRUNCATE every table. Refuse to run against a managed/prod
+    # database (e.g. Neon) unless explicitly allowed — pointing them at prod
+    # wipes real data. CI runs them against a throwaway localhost Postgres.
+    if ("neon.tech" in dsn or "supabase" in dsn) and os.getenv("ALLOW_DESTRUCTIVE_DB_TESTS") != "1":
+        pytest.skip(
+            "refusing to run destructive DB tests against a managed database; "
+            "use a throwaway Postgres, or set ALLOW_DESTRUCTIVE_DB_TESTS=1 to override"
+        )
     from db.database import get_connection, init_db
 
     init_db()
