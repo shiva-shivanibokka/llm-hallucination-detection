@@ -1,79 +1,82 @@
 """
 db/database.py
 
-SQLite database setup and connection management.
-The database file is created at eval_platform.db in the project root.
-All tables are created on first run if they don't exist.
+Postgres (Neon) connection management + migration runner.
+
+Connections come from a lazily-opened psycopg connection pool keyed on the
+DATABASE_URL env var. The app fails loudly at startup if DATABASE_URL is unset
+rather than limping along and failing on the first query.
+
+Usage:
+    with get_connection() as conn:
+        conn.execute(...)          # dict rows via dict_row
+        conn.commit()
+
+Migrations: init_db() applies every backend/migrations/*.sql file in filename
+order exactly once, tracked in the schema_migrations table.
 """
 
-import sqlite3
+import os
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent / "eval_platform.db"
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
+
+MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
+
+_pool: ConnectionPool | None = None
 
 
-def get_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
-
-
-def _migrate(conn: sqlite3.Connection) -> None:
-    """Add columns that were introduced after initial schema creation."""
-    existing = {row[1] for row in conn.execute("PRAGMA table_info(test_cases)")}
-    if "source_type" not in existing:
-        conn.execute(
-            "ALTER TABLE test_cases ADD COLUMN source_type TEXT NOT NULL DEFAULT 'internal'"
+def _dsn() -> str:
+    dsn = os.getenv("DATABASE_URL")
+    if not dsn:
+        raise RuntimeError(
+            "DATABASE_URL not set. Point it at your Neon (or local) Postgres, "
+            "e.g. postgresql://user:pass@host/db?sslmode=require"
         )
-        conn.commit()
+    return dsn
+
+
+def get_pool() -> ConnectionPool:
+    global _pool
+    if _pool is None:
+        _pool = ConnectionPool(
+            _dsn(),
+            min_size=1,
+            max_size=5,
+            kwargs={"row_factory": dict_row, "autocommit": False},
+            open=True,
+        )
+    return _pool
+
+
+def get_connection():
+    """Context manager yielding a pooled connection (dict rows)."""
+    return get_pool().connection()
+
+
+def _applied_migrations(conn) -> set[str]:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS schema_migrations (filename TEXT PRIMARY KEY)"
+    )
+    conn.commit()
+    rows = conn.execute("SELECT filename FROM schema_migrations").fetchall()
+    return {r["filename"] for r in rows}
 
 
 def init_db() -> None:
+    """Apply all pending migration files in order. Safe to call on every startup."""
+    if not MIGRATIONS_DIR.is_dir():
+        raise RuntimeError(f"migrations dir missing: {MIGRATIONS_DIR}")
+
     with get_connection() as conn:
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS benchmarks (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                name        TEXT    NOT NULL UNIQUE,
-                description TEXT    NOT NULL DEFAULT '',
-                created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS test_cases (
-                id             INTEGER PRIMARY KEY AUTOINCREMENT,
-                benchmark_id   INTEGER NOT NULL REFERENCES benchmarks(id) ON DELETE CASCADE,
-                question       TEXT    NOT NULL,
-                reference_text TEXT    NOT NULL,
-                domain         TEXT    NOT NULL DEFAULT 'general',
-                source_type    TEXT    NOT NULL DEFAULT 'internal',
-                created_at     TEXT    NOT NULL DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS eval_runs (
-                id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                benchmark_id INTEGER NOT NULL REFERENCES benchmarks(id) ON DELETE CASCADE,
-                provider     TEXT    NOT NULL,
-                model        TEXT    NOT NULL,
-                status       TEXT    NOT NULL DEFAULT 'pending',
-                avg_score    REAL,
-                grounded_pct REAL,
-                run_at       TEXT    NOT NULL DEFAULT (datetime('now')),
-                completed_at TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS run_results (
-                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id              INTEGER NOT NULL REFERENCES eval_runs(id) ON DELETE CASCADE,
-                test_case_id        INTEGER NOT NULL REFERENCES test_cases(id),
-                response            TEXT    NOT NULL,
-                overall_label       TEXT    NOT NULL,
-                hallucination_score REAL    NOT NULL,
-                grounded_count      INTEGER NOT NULL DEFAULT 0,
-                ungrounded_count    INTEGER NOT NULL DEFAULT 0,
-                contradicted_count  INTEGER NOT NULL DEFAULT 0,
-                total_sentences     INTEGER NOT NULL DEFAULT 0,
-                sentence_results    TEXT    NOT NULL DEFAULT '[]'
-            );
-        """)
-        _migrate(conn)
+        done = _applied_migrations(conn)
+        for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+            if path.name in done:
+                continue
+            sql = path.read_text(encoding="utf-8")
+            conn.execute(sql)
+            conn.execute(
+                "INSERT INTO schema_migrations (filename) VALUES (%s)", (path.name,)
+            )
+            conn.commit()

@@ -1,143 +1,153 @@
 """
 db/models.py
 
-CRUD operations for all database tables.
-Each function takes a sqlite3.Connection and returns plain dicts or lists of dicts.
-No ORM — just SQL. Keeps it readable and dependency-free.
+CRUD operations for all tables. Each function takes a psycopg Connection
+(dict_row) and returns plain dicts or lists of dicts. No ORM — just SQL.
 """
 
-import json
-import sqlite3
-from dataclasses import asdict
 from typing import Optional
 
+from psycopg.types.json import Jsonb
 
-def create_benchmark(
-    conn: sqlite3.Connection, name: str, description: str = ""
-) -> dict:
-    cur = conn.execute(
-        "INSERT INTO benchmarks (name, description) VALUES (?, ?) RETURNING *",
+
+# --------------------------------------------------------------------------- #
+# Benchmarks
+# --------------------------------------------------------------------------- #
+def create_benchmark(conn, name: str, description: str = "") -> dict:
+    row = conn.execute(
+        "INSERT INTO benchmarks (name, description) VALUES (%s, %s) RETURNING *",
         (name, description),
-    )
-    row = cur.fetchone()
+    ).fetchone()
     conn.commit()
     return dict(row)
 
 
-def get_benchmark(conn: sqlite3.Connection, benchmark_id: int) -> Optional[dict]:
+def get_benchmark(conn, benchmark_id: int) -> Optional[dict]:
     row = conn.execute(
-        "SELECT * FROM benchmarks WHERE id = ?", (benchmark_id,)
+        "SELECT * FROM benchmarks WHERE id = %s", (benchmark_id,)
     ).fetchone()
     return dict(row) if row else None
 
 
-def list_benchmarks(conn: sqlite3.Connection) -> list[dict]:
-    rows = conn.execute("""
+def list_benchmarks(conn) -> list[dict]:
+    rows = conn.execute(
+        """
         SELECT b.*, COUNT(tc.id) AS case_count
         FROM benchmarks b
         LEFT JOIN test_cases tc ON tc.benchmark_id = b.id
         GROUP BY b.id
         ORDER BY b.created_at DESC
-    """).fetchall()
+        """
+    ).fetchall()
     return [dict(r) for r in rows]
 
 
-def delete_benchmark(conn: sqlite3.Connection, benchmark_id: int) -> None:
-    conn.execute("DELETE FROM benchmarks WHERE id = ?", (benchmark_id,))
+def delete_benchmark(conn, benchmark_id: int) -> None:
+    conn.execute("DELETE FROM benchmarks WHERE id = %s", (benchmark_id,))
     conn.commit()
 
 
+# --------------------------------------------------------------------------- #
+# Test cases
+# --------------------------------------------------------------------------- #
 def add_test_case(
-    conn: sqlite3.Connection,
+    conn,
     benchmark_id: int,
     question: str,
     reference_text: str,
     domain: str = "general",
     source_type: str = "internal",
+    gold_label: Optional[str] = None,
+    answer: Optional[str] = None,
 ) -> dict:
-    cur = conn.execute(
-        "INSERT INTO test_cases (benchmark_id, question, reference_text, domain, source_type) VALUES (?, ?, ?, ?, ?) RETURNING *",
-        (benchmark_id, question, reference_text, domain, source_type),
-    )
-    row = cur.fetchone()
+    row = conn.execute(
+        """INSERT INTO test_cases
+             (benchmark_id, question, reference_text, domain, source_type, gold_label, answer)
+           VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+        (benchmark_id, question, reference_text, domain, source_type, gold_label, answer),
+    ).fetchone()
     conn.commit()
     return dict(row)
 
 
-def get_test_cases(conn: sqlite3.Connection, benchmark_id: int) -> list[dict]:
+def get_test_cases(conn, benchmark_id: int) -> list[dict]:
     rows = conn.execute(
-        "SELECT * FROM test_cases WHERE benchmark_id = ? ORDER BY id",
+        "SELECT * FROM test_cases WHERE benchmark_id = %s ORDER BY id",
         (benchmark_id,),
     ).fetchall()
     return [dict(r) for r in rows]
 
 
-def delete_test_case(conn: sqlite3.Connection, test_case_id: int) -> None:
-    conn.execute("DELETE FROM test_cases WHERE id = ?", (test_case_id,))
+def delete_test_case(conn, test_case_id: int) -> None:
+    conn.execute("DELETE FROM test_cases WHERE id = %s", (test_case_id,))
     conn.commit()
 
 
-def create_run(
-    conn: sqlite3.Connection,
-    benchmark_id: int,
-    provider: str,
-    model: str,
-) -> dict:
-    cur = conn.execute(
-        "INSERT INTO eval_runs (benchmark_id, provider, model, status) VALUES (?, ?, ?, 'running') RETURNING *",
-        (benchmark_id, provider, model),
-    )
-    row = cur.fetchone()
+# --------------------------------------------------------------------------- #
+# Runs
+# --------------------------------------------------------------------------- #
+def create_run(conn, benchmark_id: int, provider: str, model: str,
+               dataset: Optional[str] = None) -> dict:
+    row = conn.execute(
+        """INSERT INTO eval_runs (benchmark_id, provider, model, status, dataset)
+           VALUES (%s, %s, %s, 'running', %s) RETURNING *""",
+        (benchmark_id, provider, model, dataset),
+    ).fetchone()
     conn.commit()
     return dict(row)
 
 
-def complete_run(
-    conn: sqlite3.Connection,
-    run_id: int,
-    avg_score: float,
-    grounded_pct: float,
-) -> None:
+def complete_run(conn, run_id: int, avg_score: float, grounded_pct: float) -> None:
     conn.execute(
         """UPDATE eval_runs
-           SET status = 'completed', avg_score = ?, grounded_pct = ?,
-               completed_at = datetime('now')
-           WHERE id = ?""",
+           SET status = 'completed', avg_score = %s, grounded_pct = %s,
+               completed_at = now()
+           WHERE id = %s""",
         (avg_score, grounded_pct, run_id),
     )
     conn.commit()
 
 
-def fail_run(conn: sqlite3.Connection, run_id: int, reason: str) -> None:
+def fail_run(conn, run_id: int, reason: str) -> None:
     conn.execute(
-        "UPDATE eval_runs SET status = 'failed', completed_at = datetime('now') WHERE id = ?",
-        (run_id,),
+        "UPDATE eval_runs SET status = 'failed', error = %s, completed_at = now() WHERE id = %s",
+        (reason[:2000] if reason else None, run_id),
     )
     conn.commit()
 
 
-def get_run(conn: sqlite3.Connection, run_id: int) -> Optional[dict]:
-    row = conn.execute("SELECT * FROM eval_runs WHERE id = ?", (run_id,)).fetchone()
+def get_run(conn, run_id: int) -> Optional[dict]:
+    row = conn.execute(
+        """SELECT r.*, b.name AS benchmark_name
+           FROM eval_runs r JOIN benchmarks b ON b.id = r.benchmark_id
+           WHERE r.id = %s""",
+        (run_id,),
+    ).fetchone()
     return dict(row) if row else None
 
 
-def list_runs(
-    conn: sqlite3.Connection, benchmark_id: Optional[int] = None
-) -> list[dict]:
+def list_runs(conn, benchmark_id: Optional[int] = None) -> list[dict]:
     if benchmark_id is not None:
         rows = conn.execute(
-            "SELECT r.*, b.name AS benchmark_name FROM eval_runs r JOIN benchmarks b ON b.id = r.benchmark_id WHERE r.benchmark_id = ? ORDER BY r.run_at DESC",
+            """SELECT r.*, b.name AS benchmark_name
+               FROM eval_runs r JOIN benchmarks b ON b.id = r.benchmark_id
+               WHERE r.benchmark_id = %s ORDER BY r.run_at DESC""",
             (benchmark_id,),
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT r.*, b.name AS benchmark_name FROM eval_runs r JOIN benchmarks b ON b.id = r.benchmark_id ORDER BY r.run_at DESC"
+            """SELECT r.*, b.name AS benchmark_name
+               FROM eval_runs r JOIN benchmarks b ON b.id = r.benchmark_id
+               ORDER BY r.run_at DESC"""
         ).fetchall()
     return [dict(r) for r in rows]
 
 
+# --------------------------------------------------------------------------- #
+# Run results
+# --------------------------------------------------------------------------- #
 def add_run_result(
-    conn: sqlite3.Connection,
+    conn,
     run_id: int,
     test_case_id: int,
     response: str,
@@ -148,83 +158,99 @@ def add_run_result(
     contradicted_count: int,
     total_sentences: int,
     sentence_results: list,
+    predicted_label: Optional[str] = None,
 ) -> dict:
-    cur = conn.execute(
+    row = conn.execute(
         """INSERT INTO run_results
-           (run_id, test_case_id, response, overall_label, hallucination_score,
-            grounded_count, ungrounded_count, contradicted_count, total_sentences, sentence_results)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *""",
+             (run_id, test_case_id, response, overall_label, hallucination_score,
+              grounded_count, ungrounded_count, contradicted_count, total_sentences,
+              sentence_results, predicted_label)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
         (
-            run_id,
-            test_case_id,
-            response,
-            overall_label,
-            hallucination_score,
-            grounded_count,
-            ungrounded_count,
-            contradicted_count,
-            total_sentences,
-            json.dumps(sentence_results),
+            run_id, test_case_id, response, overall_label, hallucination_score,
+            grounded_count, ungrounded_count, contradicted_count, total_sentences,
+            Jsonb(sentence_results), predicted_label,
         ),
-    )
-    row = cur.fetchone()
+    ).fetchone()
     conn.commit()
     return dict(row)
 
 
-def get_run_results(conn: sqlite3.Connection, run_id: int) -> list[dict]:
+def get_run_results(conn, run_id: int) -> list[dict]:
     rows = conn.execute(
-        """SELECT rr.*, tc.question, tc.domain, tc.source_type, tc.reference_text
+        """SELECT rr.*, tc.question, tc.domain, tc.source_type, tc.reference_text,
+                  tc.gold_label
            FROM run_results rr
            JOIN test_cases tc ON tc.id = rr.test_case_id
-           WHERE rr.run_id = ?
+           WHERE rr.run_id = %s
            ORDER BY rr.id""",
         (run_id,),
     ).fetchall()
-    results = []
-    for r in rows:
-        d = dict(r)
-        d["sentence_results"] = json.loads(d["sentence_results"])
-        results.append(d)
-    return results
+    return [dict(r) for r in rows]   # sentence_results already parsed from JSONB
 
 
-def get_source_type_scores(conn: sqlite3.Connection, run_id: int) -> dict:
-    """
-    Return avg hallucination scores split by source_type (internal vs public).
-    Used in comparison reports to flag which results are trustworthy.
-    """
+def get_source_type_scores(conn, run_id: int) -> dict:
     rows = conn.execute(
         """SELECT tc.source_type,
-                  COUNT(*) AS total,
+                  COUNT(*)                    AS total,
                   AVG(rr.hallucination_score) AS avg_score,
-                  SUM(CASE WHEN rr.overall_label = 'GROUNDED' THEN 1 ELSE 0 END) AS grounded,
+                  SUM(CASE WHEN rr.overall_label = 'GROUNDED'     THEN 1 ELSE 0 END) AS grounded,
                   SUM(CASE WHEN rr.overall_label = 'HALLUCINATED' THEN 1 ELSE 0 END) AS hallucinated
            FROM run_results rr
            JOIN test_cases tc ON tc.id = rr.test_case_id
-           WHERE rr.run_id = ?
+           WHERE rr.run_id = %s
            GROUP BY tc.source_type""",
         (run_id,),
     ).fetchall()
-    result = {"internal": None, "public": None}
+    result: dict = {"internal": None, "public": None}
     for r in rows:
-        result[r["source_type"]] = dict(r)
+        d = dict(r)
+        d["avg_score"] = float(d["avg_score"]) if d["avg_score"] is not None else None
+        result[r["source_type"]] = d
     return result
 
 
-def get_domain_scores(conn: sqlite3.Connection, run_id: int) -> list[dict]:
+def get_domain_scores(conn, run_id: int) -> list[dict]:
     rows = conn.execute(
         """SELECT tc.domain,
-                  COUNT(*) AS total,
+                  COUNT(*)                    AS total,
                   AVG(rr.hallucination_score) AS avg_score,
-                  SUM(CASE WHEN rr.overall_label = 'GROUNDED' THEN 1 ELSE 0 END) AS grounded,
+                  SUM(CASE WHEN rr.overall_label = 'GROUNDED'           THEN 1 ELSE 0 END) AS grounded,
                   SUM(CASE WHEN rr.overall_label = 'PARTIALLY_GROUNDED' THEN 1 ELSE 0 END) AS partial,
-                  SUM(CASE WHEN rr.overall_label = 'HALLUCINATED' THEN 1 ELSE 0 END) AS hallucinated
+                  SUM(CASE WHEN rr.overall_label = 'HALLUCINATED'       THEN 1 ELSE 0 END) AS hallucinated
            FROM run_results rr
            JOIN test_cases tc ON tc.id = rr.test_case_id
-           WHERE rr.run_id = ?
+           WHERE rr.run_id = %s
            GROUP BY tc.domain
            ORDER BY avg_score DESC""",
         (run_id,),
     ).fetchall()
-    return [dict(r) for r in rows]
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["avg_score"] = float(d["avg_score"]) if d["avg_score"] is not None else None
+        out.append(d)
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Metrics (detector vs gold labels)
+# --------------------------------------------------------------------------- #
+def save_run_metrics(conn, run_id: int, metrics: dict) -> None:
+    conn.execute(
+        """INSERT INTO run_metrics (run_id, precision, recall, f1, accuracy, n)
+           VALUES (%s, %s, %s, %s, %s, %s)
+           ON CONFLICT (run_id) DO UPDATE SET
+             precision = EXCLUDED.precision, recall = EXCLUDED.recall,
+             f1 = EXCLUDED.f1, accuracy = EXCLUDED.accuracy, n = EXCLUDED.n""",
+        (run_id, metrics["precision"], metrics["recall"], metrics["f1"],
+         metrics["accuracy"], metrics["n"]),
+    )
+    conn.commit()
+
+
+def get_run_metrics(conn, run_id: int) -> Optional[dict]:
+    row = conn.execute(
+        "SELECT * FROM run_metrics WHERE run_id = %s", (run_id,)
+    ).fetchone()
+    return dict(row) if row else None
