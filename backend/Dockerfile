@@ -1,7 +1,7 @@
-# Backend image for Hugging Face Spaces (Docker SDK). CPU-only, non-root.
+# Backend image for GCP Cloud Run. CPU-only, non-root.
 FROM python:3.12-slim
 
-# Non-root user (HF Spaces convention: uid 1000 named "user").
+# Non-root user.
 RUN useradd -m -u 1000 user
 WORKDIR /app
 
@@ -17,9 +17,10 @@ COPY . .
 # Cache model weights under a writable, owned dir.
 ENV HF_HOME=/app/.cache \
     TRANSFORMERS_CACHE=/app/.cache \
-    PORT=7860
+    PORT=8080
 RUN mkdir -p /app/.cache && chown -R user:user /app
 USER user
 
-EXPOSE 7860
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "7860"]
+# Cloud Run sets $PORT at runtime (default 8080). Shell form so it's honored.
+EXPOSE 8080
+CMD exec uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8080}

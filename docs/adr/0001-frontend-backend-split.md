@@ -1,4 +1,4 @@
-# ADR 0001 — Split frontend (Vercel) from model backend (HF Spaces); Postgres; RAGTruth
+# ADR 0001 — Split frontend (Vercel) from model backend (GCP Cloud Run); Postgres; RAGTruth
 
 **Status:** Accepted · 2026-07-11
 
@@ -11,16 +11,19 @@ persists benchmarks/runs, and must deploy on free tiers with a web UI.
 ## Decision 1 — Two services, not one
 
 The frontend is a **Next.js app on Vercel**; the scoring API is a **FastAPI
-service on a Hugging Face Docker Space**.
+container on GCP Cloud Run**.
 
 *Why:* Vercel's free tier runs serverless/static workloads (250 MB unzipped
 function limit, ephemeral filesystem) — it cannot host a multi-GB torch model or
-a long-lived scoring process. HF Spaces gives a free, persistent CPU container
-that keeps the model warm. Splitting them lets each run where it fits and scales
-independently.
+a long-lived scoring process. Cloud Run runs the Docker image with enough memory
+(4 GiB) for DeBERTa-large, scales to zero when idle (cost control), and is a
+first-class managed-container platform. Splitting frontend from backend lets each
+run where it fits and scale independently.
 
-*Tradeoff:* cross-origin calls and a network hop; mitigated by scoped CORS and a
-server-side token proxy in Next.js so the API token never reaches the browser.
+*Tradeoff:* cross-origin calls and a network hop (mitigated by scoped CORS + a
+server-side token proxy so the API token never reaches the browser); and Cloud
+Run's scale-to-zero means a cold start reloads the model on the first request
+after idle. Acceptable for a demo; `--min-instances 1` removes it at a cost.
 
 ## Decision 2 — Neon Postgres, not SQLite
 
@@ -56,10 +59,12 @@ threshold is explicit and tunable, not buried in the runner.
 
 ## What happens at 10× load
 
-Today: one Space, one small pool, background-task runs. At 10× concurrent runs
-the bottlenecks, in order, are (1) the single CPU Space's NLI throughput —
-addressed by moving scoring to a queue + worker (or GPU Space) and returning run
-IDs immediately (the API already does async background runs); (2) Postgres
-connections — the pool caps at 5, and Neon's pooled endpoint absorbs more; (3)
-provider rate limits — per-provider concurrency limits and retries. The
-frontend/DB split means each can scale without touching the others.
+Today: one Cloud Run service (scale-to-zero), one small pool, background-task
+runs. At 10× concurrent runs the bottlenecks, in order, are (1) CPU NLI
+throughput — Cloud Run autoscales instances, but reliable long runs want a real
+queue + worker (Cloud Tasks / a Cloud Run Job) instead of in-process background
+tasks, returning run IDs immediately (the API already does async runs); (2)
+Postgres connections — the pool caps at 5 per instance, and Neon's pooled
+endpoint absorbs the fan-out; (3) provider rate limits — per-provider concurrency
+caps and retries. The frontend/DB split means each scales without touching the
+others.
