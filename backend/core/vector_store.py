@@ -7,7 +7,6 @@ One in-memory collection per process — ephemeral, resets on restart.
 
 import logging
 import uuid
-from typing import Optional
 
 import chromadb
 from chromadb.utils import embedding_functions

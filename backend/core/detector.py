@@ -13,7 +13,7 @@ Overall hallucination score and label are derived from sentence-level results.
 """
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 import torch
