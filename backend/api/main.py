@@ -344,12 +344,16 @@ def get_run_metrics(run_id: int):
 # --------------------------------------------------------------------------- #
 # Dataset seeding
 # --------------------------------------------------------------------------- #
+MAX_SEED_LIMIT = 200  # seeding is synchronous; keep it under the HF Spaces request timeout
+
+
 @app.post("/datasets/ragtruth/seed", status_code=201, dependencies=[Depends(require_token)])
 def seed_ragtruth(req: SeedRagtruthRequest):
-    name = req.name or f"RAGTruth {req.split} (n={req.limit})"
+    limit = max(1, min(req.limit, MAX_SEED_LIMIT))
+    name = req.name or f"RAGTruth {req.split} (n={limit})"
     try:
         with get_connection() as conn:
-            return seed_ragtruth_benchmark(conn, name, split=req.split, limit=req.limit)
+            return seed_ragtruth_benchmark(conn, name, split=req.split, limit=limit)
     except Exception as e:
         log.exception("ragtruth_seed_failed")
         raise HTTPException(status_code=500, detail=f"RAGTruth seed failed: {e}")

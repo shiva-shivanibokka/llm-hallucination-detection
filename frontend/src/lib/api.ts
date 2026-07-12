@@ -85,18 +85,39 @@ export interface RunMetrics {
   n: number;
 }
 
+export interface SourceTypeScore {
+  source_type: string;
+  total: number;
+  avg_score: number | null;
+  grounded: number;
+  hallucinated: number;
+}
+
+export interface ComparePerCase {
+  test_case_id: number;
+  question: string;
+  domain: string;
+  source_type: string;
+  score_a: number;
+  label_a: string;
+  score_b: number;
+  label_b: string;
+  delta: number;
+  verdict: string;
+}
+
 export interface CompareResult {
-  run_a: number;
-  run_b: number;
+  run_a: Run;
+  run_b: Run;
   avg_score_a: number;
   avg_score_b: number;
   overall_delta: number;
   improved_count: number;
   regressed_count: number;
   stable_count: number;
-  source_type_scores_a: Record<string, number>;
-  source_type_scores_b: Record<string, number>;
-  per_case: Array<Record<string, unknown>>;
+  source_type_scores_a: Record<string, SourceTypeScore | null>;
+  source_type_scores_b: Record<string, SourceTypeScore | null>;
+  per_case: ComparePerCase[];
 }
 
 // ---------- Request bodies ----------
