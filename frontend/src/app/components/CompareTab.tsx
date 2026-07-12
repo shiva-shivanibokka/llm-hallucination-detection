@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { compare, listRuns, type CompareResult, type Run } from "@/lib/api";
+import Help from "./Help";
 
 function verdictColor(label: string): string {
   const l = label.toUpperCase();
@@ -71,7 +72,10 @@ export default function CompareTab() {
       <div className="control-row">
         <div className="field">
           <label>
-            <span className="lname">Run A (baseline)</span>
+            <span className="lname">
+              Run A (baseline)
+              <Help text="The reference run to compare against." />
+            </span>
           </label>
           <select value={runAId ?? ""} onChange={(e) => setRunAId(Number(e.target.value))}>
             {runs.map((r) => (
@@ -83,7 +87,10 @@ export default function CompareTab() {
         </div>
         <div className="field">
           <label>
-            <span className="lname">Run B (candidate)</span>
+            <span className="lname">
+              Run B (candidate)
+              <Help text="The run compared to the baseline. Must share test cases with A (compare two runs of the same benchmark)." />
+            </span>
           </label>
           <select value={runBId ?? ""} onChange={(e) => setRunBId(Number(e.target.value))}>
             {runs.map((r) => (

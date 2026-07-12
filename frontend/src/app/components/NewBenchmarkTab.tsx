@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createBenchmark, deleteBenchmark, generateCases, getProviders, type Providers } from "@/lib/api";
 import { extractPdfText } from "@/lib/pdf";
+import { getApiKey, setApiKey as persistApiKey } from "@/lib/keyStore";
+import Help from "./Help";
 
 const DOMAINS = ["general", "legal", "medical", "finance", "technical", "news", "other"];
 
@@ -19,7 +21,12 @@ export default function NewBenchmarkTab() {
   const [numQuestions, setNumQuestions] = useState(10);
   const [domain, setDomain] = useState(DOMAINS[0]);
   const [sourceType, setSourceType] = useState<"internal" | "public">("internal");
-  const [apiKey, setApiKey] = useState("");
+  // Key persists across tab switches (in-memory), cleared on refresh/close.
+  const [apiKey, setApiKey] = useState(getApiKey);
+  function updateApiKey(v: string) {
+    setApiKey(v);
+    persistApiKey(v);
+  }
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [generatedQuestions, setGeneratedQuestions] = useState<string[] | null>(null);
@@ -122,7 +129,10 @@ export default function NewBenchmarkTab() {
       <div className="control-row">
         <div className="field" style={{ flexBasis: "100%" }}>
           <label>
-            <span className="lname">Source PDF</span>
+            <span className="lname">
+              Source PDF
+              <Help text="The reference document. Its text is extracted in your browser, then the model writes questions grounded in it." />
+            </span>
           </label>
           <input ref={fileRef} type="file" accept="application/pdf" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
           {extracting && <span className="note">Extracting text…</span>}
@@ -133,7 +143,10 @@ export default function NewBenchmarkTab() {
 
         <div className="field">
           <label>
-            <span className="lname">Benchmark name</span>
+            <span className="lname">
+              Benchmark name
+              <Help text="A label for this benchmark, shown in the Run Eval and Results lists." />
+            </span>
           </label>
           <input
             type="text"
@@ -145,7 +158,10 @@ export default function NewBenchmarkTab() {
 
         <div className="field">
           <label>
-            <span className="lname">Domain</span>
+            <span className="lname">
+              Domain
+              <Help text="A topic tag for these cases, used to group scores in the Results domain breakdown." />
+            </span>
           </label>
           <select value={domain} onChange={(e) => setDomain(e.target.value)}>
             {DOMAINS.map((d) => (
@@ -158,7 +174,10 @@ export default function NewBenchmarkTab() {
 
         <div className="field">
           <label>
-            <span className="lname">Questions to generate</span>
+            <span className="lname">
+              Questions to generate
+              <Help text="How many questions the model writes from the document. Each becomes one test case." />
+            </span>
             <b>{numQuestions}</b>
           </label>
           <input
@@ -173,7 +192,10 @@ export default function NewBenchmarkTab() {
 
         <div className="field">
           <label>
-            <span className="lname">Source type</span>
+            <span className="lname">
+              Source type
+              <Help text="Internal = a private document the model hasn't seen. Public = may be in the model's training data (contamination risk)." />
+            </span>
           </label>
           <div className="seg">
             <button type="button" aria-pressed={sourceType === "internal"} onClick={() => setSourceType("internal")}>
@@ -187,7 +209,10 @@ export default function NewBenchmarkTab() {
 
         <div className="field">
           <label>
-            <span className="lname">Provider</span>
+            <span className="lname">
+              Provider
+              <Help text="Which LLM service writes the questions from your document." />
+            </span>
           </label>
           <select value={provider} onChange={(e) => handleProviderChange(e.target.value)}>
             {Object.keys(providers).map((p) => (
@@ -200,7 +225,10 @@ export default function NewBenchmarkTab() {
 
         <div className="field">
           <label>
-            <span className="lname">Model</span>
+            <span className="lname">
+              Model
+              <Help text="The specific model from the chosen provider used to write the questions." />
+            </span>
           </label>
           <select value={model} onChange={(e) => setModel(e.target.value)}>
             {(providers[provider]?.models ?? []).map((m) => (
@@ -213,12 +241,15 @@ export default function NewBenchmarkTab() {
 
         <div className="field">
           <label>
-            <span className="lname">Your API key</span>
+            <span className="lname">
+              Your API key
+              <Help text="Your provider key, used to generate questions. Required here. Kept in memory for this session and cleared on refresh — never stored." />
+            </span>
           </label>
           <input
             type="password"
             value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
+            onChange={(e) => updateApiKey(e.target.value)}
             placeholder="Required — never stored"
             autoComplete="off"
           />

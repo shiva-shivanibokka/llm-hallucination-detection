@@ -10,6 +10,8 @@ import {
   type Providers,
   type RunDetail,
 } from "@/lib/api";
+import { getApiKey, setApiKey as persistApiKey } from "@/lib/keyStore";
+import Help from "./Help";
 
 const DEFAULT_THRESHOLDS = { entail: 0.5, contradict: 0.5, grounded: 0.3, partial: 0.6 };
 const POLL_MS = 3000;
@@ -20,7 +22,12 @@ export default function RunEvalTab() {
   const [benchmarkId, setBenchmarkId] = useState<number | null>(null);
   const [provider, setProvider] = useState("");
   const [model, setModel] = useState("");
-  const [apiKey, setApiKey] = useState("");
+  // Key persists across tab switches (in-memory), cleared on refresh/close.
+  const [apiKey, setApiKey] = useState(getApiKey);
+  function updateApiKey(v: string) {
+    setApiKey(v);
+    persistApiKey(v);
+  }
   const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -120,7 +127,10 @@ export default function RunEvalTab() {
       <div className="control-row">
         <div className="field">
           <label>
-            <span className="lname">Benchmark</span>
+            <span className="lname">
+              Benchmark
+              <Help text="The set of questions + reference documents to score. RAGTruth benchmarks come with human labels and stored answers." />
+            </span>
           </label>
           <select value={benchmarkId ?? ""} onChange={(e) => setBenchmarkId(Number(e.target.value))}>
             {benchmarks.length === 0 && <option value="">No benchmarks yet</option>}
@@ -133,7 +143,10 @@ export default function RunEvalTab() {
         </div>
         <div className="field">
           <label>
-            <span className="lname">Provider</span>
+            <span className="lname">
+              Provider
+              <Help text="Which LLM service generates the answers. Ignored for RAGTruth benchmarks, which already include answers to score." />
+            </span>
           </label>
           <select value={provider} onChange={(e) => handleProviderChange(e.target.value)}>
             {Object.keys(providers).map((p) => (
@@ -145,7 +158,10 @@ export default function RunEvalTab() {
         </div>
         <div className="field">
           <label>
-            <span className="lname">Model</span>
+            <span className="lname">
+              Model
+              <Help text="The specific model from the chosen provider used to generate answers." />
+            </span>
           </label>
           <select value={model} onChange={(e) => setModel(e.target.value)}>
             {(providers[provider]?.models ?? []).map((m) => (
@@ -157,12 +173,15 @@ export default function RunEvalTab() {
         </div>
         <div className="field">
           <label>
-            <span className="lname">Your API key</span>
+            <span className="lname">
+              Your API key
+              <Help text="Your provider key, used only to generate fresh answers. Kept in memory for this session and cleared on refresh — never stored. RAGTruth benchmarks need no key." />
+            </span>
           </label>
           <input
             type="password"
             value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
+            onChange={(e) => updateApiKey(e.target.value)}
             placeholder="Needed to generate fresh answers"
             autoComplete="off"
           />
@@ -176,7 +195,10 @@ export default function RunEvalTab() {
         <div className="control-row">
           <div className="field">
             <label>
-              <span className="lname">Entail threshold</span>
+              <span className="lname">
+                Entail threshold
+                <Help text="How strongly a source must support a sentence for it to count as GROUNDED. Higher = stricter." />
+              </span>
               <b>{thresholds.entail.toFixed(2)}</b>
             </label>
             <input
@@ -190,7 +212,10 @@ export default function RunEvalTab() {
           </div>
           <div className="field">
             <label>
-              <span className="lname">Contradict threshold</span>
+              <span className="lname">
+                Contradict threshold
+                <Help text="How strongly a source must oppose a sentence for it to count as CONTRADICTED. Higher = stricter." />
+              </span>
               <b>{thresholds.contradict.toFixed(2)}</b>
             </label>
             <input
@@ -204,7 +229,10 @@ export default function RunEvalTab() {
           </div>
           <div className="field">
             <label>
-              <span className="lname">Grounded ceiling</span>
+              <span className="lname">
+                Grounded ceiling
+                <Help text="Max average hallucination score for the whole answer to be labeled GROUNDED. Below this = grounded." />
+              </span>
               <b>{thresholds.grounded.toFixed(2)}</b>
             </label>
             <input
@@ -218,7 +246,10 @@ export default function RunEvalTab() {
           </div>
           <div className="field">
             <label>
-              <span className="lname">Partial ceiling</span>
+              <span className="lname">
+                Partial ceiling
+                <Help text="Between the grounded ceiling and this = PARTIALLY_GROUNDED; above this = HALLUCINATED." />
+              </span>
               <b>{thresholds.partial.toFixed(2)}</b>
             </label>
             <input
@@ -266,9 +297,21 @@ export default function RunEvalTab() {
           </p>
           {run.status === "failed" && run.error && <div className="callout err note">{run.error}</div>}
           {run.status === "completed" && (
-            <p className="note">
-              Done. Check the <strong>Results</strong> tab for the breakdown.
-            </p>
+            <>
+              <div className="tiles">
+                <div className="tile">
+                  <div className="v">{run.avg_score != null ? run.avg_score.toFixed(3) : "—"}</div>
+                  <div className="k">Avg hallucination score</div>
+                </div>
+                <div className="tile">
+                  <div className="v">{run.grounded_pct != null ? `${(run.grounded_pct * 100).toFixed(1)}%` : "—"}</div>
+                  <div className="k">Grounded rate</div>
+                </div>
+              </div>
+              <p className="note">
+                Done. Full per-question breakdown and F1 vs human labels on the <strong>Results</strong> tab.
+              </p>
+            </>
           )}
         </div>
       )}

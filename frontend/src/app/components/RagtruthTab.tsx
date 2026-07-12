@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { seedRagtruth, type SeedRagtruthResult } from "@/lib/api";
+import Help from "./Help";
 
 export default function RagtruthTab() {
   const [split, setSplit] = useState<"train" | "test">("train");
@@ -36,7 +37,10 @@ export default function RagtruthTab() {
       <div className="control-row">
         <div className="field">
           <label>
-            <span className="lname">Split</span>
+            <span className="lname">
+              Split
+              <Help text="Which RAGTruth partition to pull cases from — train or test." />
+            </span>
           </label>
           <select value={split} onChange={(e) => setSplit(e.target.value as "train" | "test")}>
             <option value="train">train</option>
@@ -45,7 +49,10 @@ export default function RagtruthTab() {
         </div>
         <div className="field">
           <label>
-            <span className="lname">Number of cases</span>
+            <span className="lname">
+              Number of cases
+              <Help text="How many human-labeled cases to load into the benchmark (1–200)." />
+            </span>
             <b>{limit}</b>
           </label>
           <input type="range" min={1} max={200} step={1} value={limit} onChange={(e) => setLimit(Number(e.target.value))} />

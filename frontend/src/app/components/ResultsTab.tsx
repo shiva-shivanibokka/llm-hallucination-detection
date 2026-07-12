@@ -11,6 +11,7 @@ import {
   type RunMetrics,
   type RunResult,
 } from "@/lib/api";
+import Help from "./Help";
 
 function verdictColor(label: string): string {
   const l = label.toUpperCase();
@@ -93,7 +94,10 @@ export default function ResultsTab() {
     <div className="demo">
       <div className="field" style={{ maxWidth: 420 }}>
         <label>
-          <span className="lname">Run</span>
+          <span className="lname">
+            Run
+            <Help text="Pick a completed run to inspect its scores, per-question verdicts, and — for labeled runs — F1 vs human labels." />
+          </span>
         </label>
         <select value={runId ?? ""} onChange={(e) => setRunId(Number(e.target.value))}>
           {runs.map((r) => (
