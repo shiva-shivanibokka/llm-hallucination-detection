@@ -42,10 +42,16 @@ def get_pool() -> ConnectionPool:
     if _pool is None:
         # min_size=0: don't hold a connection open while idle, so Neon (free tier)
         # can autosuspend and not burn compute hours when the backend is idle.
+        # check=check_connection: Neon terminates idle connections on autosuspend
+        # ("terminating connection due to administrator command"), so validate each
+        # connection on checkout and transparently replace dead ones.
+        # max_idle: recycle connections before Neon's ~5 min idle timeout.
         _pool = ConnectionPool(
             _dsn(),
             min_size=0,
             max_size=5,
+            max_idle=180,
+            check=ConnectionPool.check_connection,
             kwargs={"row_factory": dict_row, "autocommit": False},
             open=True,
         )
