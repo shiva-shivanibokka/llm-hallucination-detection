@@ -1,26 +1,85 @@
 @import "tailwindcss";
 
+/*
+  Instrument-panel token system.
+  The three verdict colors (grounded / partial / hallucinated) are the
+  product's actual semantics, not decoration — they're reused everywhere
+  a score or label appears, in cards, badges, and the score-track signature.
+*/
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --bg: #f6f7f8;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --border: #dfe3e7;
+  --text: #12161b;
+  --text-muted: #5b6670;
+  --accent: #3457d5;
+  --accent-soft: #e8edfd;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --grounded: #0f9d78;
+  --grounded-soft: #e1f6ee;
+  --partial: #b4790e;
+  --partial-soft: #fbf0da;
+  --hallucinated: #d1394f;
+  --hallucinated-soft: #fbe4e8;
+
+  --danger: #d1394f;
+  --font-body: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg: #0b0e11;
+    --surface: #12161b;
+    --surface-raised: #171c22;
+    --border: #232a31;
+    --text: #e8ecef;
+    --text-muted: #8b97a1;
+    --accent: #6f8fff;
+    --accent-soft: #1b2340;
+
+    --grounded: #2dd4a7;
+    --grounded-soft: #10302a;
+    --partial: #e8a93b;
+    --partial-soft: #332711;
+    --hallucinated: #f0647a;
+    --hallucinated-soft: #34161c;
   }
 }
 
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-grounded: var(--grounded);
+  --color-partial: var(--partial);
+  --color-hallucinated: var(--hallucinated);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: light dark;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body), Arial, Helvetica, sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
