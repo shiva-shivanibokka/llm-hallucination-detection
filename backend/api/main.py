@@ -11,6 +11,7 @@ Run with:
 """
 
 import csv
+import hmac
 import io
 import os
 import re
@@ -72,7 +73,7 @@ def require_token(authorization: str = Header(default="")) -> None:
     """Guard for mutating endpoints. Expects `Authorization: Bearer <APP_API_TOKEN>`."""
     expected = os.getenv("APP_API_TOKEN", "")
     scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not token or token != expected:
+    if scheme.lower() != "bearer" or not token or not hmac.compare_digest(token, expected):
         raise HTTPException(status_code=401, detail="Invalid or missing bearer token.")
 
 

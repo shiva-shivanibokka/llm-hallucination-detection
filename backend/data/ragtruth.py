@@ -73,6 +73,17 @@ def seed_ragtruth_benchmark(conn, name: str, split: str = "train",
     from db import models as db
 
     cases = load_ragtruth(split=split, limit=limit)
+    if not cases:
+        raise ValueError("RAGTruth returned no usable rows — check dataset id/split.")
+    # Fail loudly on a likely schema mismatch: if a healthy sample has zero
+    # hallucinated labels, the annotation fields were probably misread and every
+    # case silently became 'grounded', which would poison the F1 metric.
+    if len(cases) >= 10 and not any(c.gold_label == "hallucinated" for c in cases):
+        raise ValueError(
+            "No 'hallucinated' gold labels in the RAGTruth sample — the "
+            "hallucination-annotation field names likely changed. Verify the "
+            "'wandb/RAGTruth-processed' schema in data/ragtruth.py before seeding."
+        )
     bm = db.create_benchmark(conn, name, f"RAGTruth {split} (n={len(cases)}) — human-labeled")
     for c in cases:
         db.add_test_case(

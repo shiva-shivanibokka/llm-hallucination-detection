@@ -51,34 +51,41 @@ def run_benchmark(
     partial_ceiling: float = DEFAULT_PARTIAL_CEILING,
 ) -> None:
     """Execute a benchmark run end-to-end. Writes results to the DB as it goes."""
+    # Load the NLI model BEFORE touching the DB — otherwise the read transaction
+    # below sits idle-in-transaction for the whole (multi-minute) model load,
+    # holding a scarce pool connection that Neon/pgbouncer may kill.
+    detector = HallucinationDetector()
+
     with get_connection() as conn:
         run = get_run(conn, run_id)
         if not run:
             log.warning("run_not_found", extra={"run_id": run_id})
             return
-
-        provider, model = run["provider"], run["model"]
         test_cases = get_test_cases(conn, run["benchmark_id"])
-        if not test_cases:
+
+    provider, model = run["provider"], run["model"]
+    if not test_cases:
+        with get_connection() as conn:
             fail_run(conn, run_id, "Benchmark has no test cases.")
-            return
+        return
 
-        log.info("run_started", extra={"run_id": run_id, "cases": len(test_cases),
-                                       "provider": provider, "model": model})
-        detector = HallucinationDetector()
-        scores: list[float] = []
-        grounded_verdicts = 0
-        label_pairs: list[tuple[str, str]] = []  # (predicted, gold) when labeled
+    log.info("run_started", extra={"run_id": run_id, "cases": len(test_cases),
+                                   "provider": provider, "model": model})
+    scores: list[float] = []
+    grounded_verdicts = 0
+    label_pairs: list[tuple[str, str]] = []  # (predicted, gold) when labeled
 
-        try:
-            for tc in test_cases:
-                response, analysis = _score_case(
-                    tc, detector, provider, model,
-                    entail_threshold, contradict_threshold,
-                    grounded_ceiling, partial_ceiling, run_id,
-                )
-                predicted = label_to_binary(analysis["overall_label"])
+    try:
+        for tc in test_cases:
+            # Generation + NLI scoring happen with NO DB connection held.
+            response, analysis = _score_case(
+                tc, detector, provider, model,
+                entail_threshold, contradict_threshold,
+                grounded_ceiling, partial_ceiling, run_id,
+            )
+            predicted = label_to_binary(analysis["overall_label"])
 
+            with get_connection() as conn:  # short-lived write per case
                 add_run_result(
                     conn,
                     run_id=run_id,
@@ -94,26 +101,27 @@ def run_benchmark(
                     predicted_label=predicted,
                 )
 
-                scores.append(analysis["overall_hallucination_score"])
-                if analysis["overall_label"] == "GROUNDED":
-                    grounded_verdicts += 1
-                if tc.get("gold_label") in ("hallucinated", "grounded"):
-                    label_pairs.append((predicted, tc["gold_label"]))
+            scores.append(analysis["overall_hallucination_score"])
+            if analysis["overall_label"] == "GROUNDED":
+                grounded_verdicts += 1
+            if tc.get("gold_label") in ("hallucinated", "grounded"):
+                label_pairs.append((predicted, tc["gold_label"]))
 
-            avg_score = sum(scores) / len(scores) if scores else 0.0
-            grounded_pct = grounded_verdicts / len(test_cases)
+        avg_score = sum(scores) / len(scores) if scores else 0.0
+        grounded_pct = grounded_verdicts / len(test_cases)
+        with get_connection() as conn:
             complete_run(conn, run_id, avg_score, grounded_pct)
-
             # Detector-vs-human metrics only when every scored case is labeled.
             if label_pairs and len(label_pairs) == len(test_cases):
                 metrics = binary_metrics(label_pairs)
                 save_run_metrics(conn, run_id, metrics)
                 log.info("run_metrics", extra={"run_id": run_id, **metrics})
 
-            log.info("run_completed", extra={"run_id": run_id, "avg_score": avg_score})
+        log.info("run_completed", extra={"run_id": run_id, "avg_score": avg_score})
 
-        except Exception as e:  # noqa: BLE001 — mark the run failed, don't crash the worker
-            log.exception("run_failed", extra={"run_id": run_id})
+    except Exception as e:  # noqa: BLE001 — mark the run failed, don't crash the worker
+        log.exception("run_failed", extra={"run_id": run_id})
+        with get_connection() as conn:
             fail_run(conn, run_id, str(e))
 
 
