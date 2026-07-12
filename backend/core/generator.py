@@ -108,11 +108,9 @@ DEFAULT_MODEL: dict[str, str] = {
 }
 
 
-def _get_client(provider: str, runtime_api_key: Optional[str] = None) -> OpenAI:
-    """
-    Return an OpenAI SDK client configured for the given provider.
-    runtime_api_key (from the request body) takes priority over env vars.
-    """
+def _get_client(provider: str) -> OpenAI:
+    """Return an OpenAI SDK client configured for the given provider.
+    Keys come from the server environment only (never the request body)."""
     provider = provider.lower()
     if provider not in PROVIDERS:
         raise ValueError(
@@ -125,11 +123,11 @@ def _get_client(provider: str, runtime_api_key: Optional[str] = None) -> OpenAI:
         # Ollama — local, no key needed
         api_key = "ollama"
     else:
-        api_key = runtime_api_key or os.getenv(cfg["env_key"])
+        api_key = os.getenv(cfg["env_key"])
         if not api_key:
             raise ValueError(
-                f"API key for '{provider}' not provided. "
-                f"Set {cfg['env_key']} in your .env file or paste it in the UI."
+                f"API key for '{provider}' not configured. "
+                f"Set {cfg['env_key']} in the server environment (HF Space Secrets)."
             )
 
     return OpenAI(
@@ -144,7 +142,6 @@ def _call_llm(
     prompt: str,
     provider: str,
     model: Optional[str],
-    api_key: Optional[str],
 ) -> str:
     """Core call: routes to the right provider and returns the response text."""
     provider = provider.lower()
@@ -154,7 +151,7 @@ def _call_llm(
             f"No model specified and no default found for provider '{provider}'."
         )
 
-    client = _get_client(provider, api_key)
+    client = _get_client(provider)
     try:
         response = client.chat.completions.create(
             model=resolved_model,
@@ -177,7 +174,6 @@ def generate_grounded(
     vector_store,
     provider: str = "openai",
     model: Optional[str] = None,
-    api_key: Optional[str] = None,
 ) -> str:
     """Generate a response grounded in source documents from the vector store."""
     candidates = vector_store.query(question, k=TOP_K_CONTEXT)
@@ -199,4 +195,4 @@ def generate_grounded(
         "Only state something is missing if the documents genuinely contain nothing relevant."
     )
     prompt = f"Source documents:\n\n{context}\n\nQuestion: {question}"
-    return _call_llm(system, prompt, provider, model, api_key)
+    return _call_llm(system, prompt, provider, model)
