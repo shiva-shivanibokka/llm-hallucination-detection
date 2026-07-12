@@ -7,7 +7,7 @@ export default function AboutTab() {
   return (
     <div className="demo about">
       <div className="callout note">
-        <strong>What this is.</strong> A hallucination detector for LLM answers. It reads a model&rsquo;s answer one
+        <strong>What this is.</strong>{" "}A hallucination detector for LLM answers. It reads a model&rsquo;s answer one
         sentence at a time and checks each sentence against a reference document with a natural-language-inference (NLI)
         model — asking &ldquo;does the source actually support this?&rdquo; It then grades the whole answer
         <em> grounded</em>, <em>partially grounded</em>, or <em>hallucinated</em>. The headline number is how often
