@@ -1,14 +1,18 @@
 # LLM Hallucination Eval Platform
 
 > [!IMPORTANT]
-> **The hosted demo is temporary.** This project's backend runs on Google Cloud
-> Run under a Google Cloud free trial that ends **around 19 September 2026**.
-> When the trial closes the service is stopped, and every `run.app` link below
-> stops responding. The hosted frontend will keep loading after that date, but it
-> will not be able to reach its API, so it will show no data.
+> **The hosted demo is switched off.** This project's backend ran on Google Cloud
+> Run under a Google Cloud free trial, which has since ended. The service is
+> stopped and every `run.app` link below returns an error. The hosted frontend
+> still loads, and now says the backend is offline rather than showing an empty
+> page.
 >
-> Nothing in this repository depends on that. The code, tests and results are
-> complete, and the instructions below run the whole thing locally.
+> This note used to say the trial would end "around 19 September 2026" and wrote
+> the consequences in the future tense. That date has passed, so it is written as
+> the fact it now is.
+>
+> Nothing in this repository depends on the hosted service. The code and tests
+> are complete, and the instructions below run the whole thing locally.
 
 
 > Score an LLM's answers against reference documents with an NLI detector — and measure that detector against **human** hallucination labels.
@@ -225,7 +229,9 @@ All three tiers run on free plans.
 
 ## Results
 
-This is a working, deployed system, not a static demo: seed a labeled benchmark, run it, and the Results tab reports the detector's precision / recall / F1 against the human labels. The numbers you get are computed live from your run — no figures are baked into this README, because a benchmark result is only meaningful with its sample size and configuration attached, and those are yours to choose.
+This project computes its results rather than quoting them: seed a labeled benchmark, run it, and the Results tab reports the detector's precision / recall / F1 against the human labels. No figures are baked into this README, because a benchmark result is only meaningful with its sample size and configuration attached, and those are yours to choose.
+
+**Two consequences worth stating rather than leaving to be discovered.** First, the hosted demo can no longer run anything (see the note at the top), so reproducing these numbers means running the stack locally with the instructions above. Second, because nothing is recorded here, there is no fallback set of figures to read instead — the design choice that keeps unlabelled numbers out of the README also means this repository reports no measured result of its own. That is a deliberate trade, not an omission, but it is the opposite trade from the rest of these projects, and this sentence used to read "this is a working, deployed system, not a static demo", which is no longer true of the hosted copy.
 
 ## Roadmap
 

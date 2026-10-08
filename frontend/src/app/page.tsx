@@ -3,6 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import type { ComponentType } from "react";
+import { useBackendHealth } from "./components/useBackendHealth";
 
 const load = (p: () => Promise<{ default: ComponentType }>) =>
   dynamic(p, { ssr: false, loading: () => <p className="note">loading…</p> });
@@ -53,6 +54,7 @@ const TAB_COMPONENTS: Record<string, ComponentType> = {
 export default function Home() {
   const [active, setActive] = useState(TABS[0].id);
   const tab = TABS.find((t) => t.id === active)!;
+  const health = useBackendHealth();
   const Comp = TAB_COMPONENTS[tab.id];
 
   return (
@@ -64,9 +66,41 @@ export default function Home() {
           entailment model, then reports how well that detector agrees with human hallucination labels from
           RAGTruth.
         </p>
-        <span className="live">
-          <b>●</b> live · GCP Cloud Run + Neon · RAGTruth-labeled
-        </span>
+        {/* This said "live · GCP Cloud Run + Neon · RAGTruth-labeled"
+            unconditionally. It was markup, not a status, so it kept saying
+            "live" after the Google Cloud free trial behind the backend closed.
+            It now reports what the health check actually found. */}
+        {health === "ok" ? (
+          <span className="live">
+            <b>●</b> live · GCP Cloud Run + Neon · RAGTruth-labeled
+          </span>
+        ) : health === "offline" ? (
+          <span className="live offline">
+            <b>●</b> backend offline
+          </span>
+        ) : (
+          <span className="live checking">
+            <b>●</b> {health === "waking" ? "waking the backend…" : "checking the backend…"}
+          </span>
+        )}
+
+        {health === "offline" && (
+          <p className="notice" role="status">
+            <b>The backend for this demo is switched off.</b> It ran on Google Cloud Run
+            under a Google Cloud free trial that has since ended, so seeding a benchmark,
+            running an evaluation and the Results tab cannot work here. This project
+            computes its numbers from your own run rather than baking figures into the
+            repository, so there is no recorded result to show in their place —{" "}
+            <a
+              href="https://github.com/shiva-shivanibokka/LLM-Halucination-Detection#getting-started"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              the README runs the whole stack locally
+            </a>
+            , which is the only way to reproduce them.
+          </p>
+        )}
       </header>
 
       <nav className="tabs" role="tablist" aria-label="Sections">

@@ -67,6 +67,21 @@ a { color: var(--cyan); text-decoration-color: color-mix(in srgb, var(--cyan) 45
   border: 1px solid var(--border); border-radius: 999px; padding: .4rem .9rem; background: var(--panel);
 }
 .hero .live b { color: var(--lime); }
+/* The badge is only lime when the health check says so. Amber while it is still
+   plausible the backend is waking; muted and unlit once it is not. */
+.hero .live.checking b { color: var(--amber); }
+.hero .live.offline { color: var(--muted); }
+.hero .live.offline b { color: var(--muted); }
+
+/* The standing notice: the demo cannot work, and what to do instead. */
+.hero .notice {
+  margin: 1.1rem 0 0; padding: .95rem 1.15rem;
+  border: 1px solid var(--border); border-left: 3px solid var(--amber);
+  border-radius: 10px; background: var(--panel);
+  color: var(--muted); font-size: .94rem; line-height: 1.65; width: 100%;
+}
+.hero .notice b { color: var(--text); font-weight: 600; }
+.hero .notice a { color: var(--text); text-underline-offset: 3px; }
 
 /* ---- tabs ---- */
 .tabs { display: flex; flex-wrap: wrap; gap: .55rem; margin: 2.2rem 0 1.6rem; }
