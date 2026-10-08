@@ -22,7 +22,7 @@
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)
 ![Next.js 16](https://img.shields.io/badge/Next.js-16-black.svg)
 
-**Live:** [llm-hallucination-detection.vercel.app](https://llm-hallucination-detection.vercel.app) · **API:** [Cloud Run](https://llm-eval-backend-1033307298880.us-east1.run.app/health) (docs at [`/docs`](https://llm-eval-backend-1033307298880.us-east1.run.app/docs))
+**Frontend:** [llm-hallucination-detection.vercel.app](https://llm-hallucination-detection.vercel.app) — loads, and reports the backend as offline · **API:** Cloud Run, **switched off** (see the note above); `llm-eval-backend-….us-east1.run.app` returns 503.
 
 ---
 
@@ -166,15 +166,21 @@ Open `http://localhost:3000`, go to the **RAGTruth** tab, seed a benchmark, and 
 
 ## Usage
 
-The public read endpoints need no auth:
+The public read endpoints need no auth. **Against a local backend** — the hosted
+one is switched off, and these two commands used to be written against it with a
+`200` response printed underneath, which has not been obtainable since the free
+trial closed:
 
 ```bash
-curl https://llm-eval-backend-1033307298880.us-east1.run.app/health
+curl http://localhost:8000/health
 # {"status":"ok","db":"ok","model":"lazy"}
 
-curl https://llm-eval-backend-1033307298880.us-east1.run.app/providers
+curl http://localhost:8000/providers
 # {"openai":{"models":["gpt-4o", ...],"requires_key":true}, ...}
 ```
+
+Run the backend first with the commands under [Getting started](#getting-started).
+The same calls against `llm-eval-backend-….us-east1.run.app` return 503.
 
 Mutating endpoints (`POST /datasets/ragtruth/seed`, `POST /runs`, …) require the bearer token and are normally driven through the UI, which proxies the token server-side. The end-to-end no-key demo flow is: **RAGTruth → seed → Run Eval → Start → Results (F1)**.
 
